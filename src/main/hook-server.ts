@@ -35,9 +35,7 @@ export function startHookServer(win: BrowserWindow): void {
     res.sendStatus(200)
   })
 
-  app.listen(PORT, '127.0.0.1', () => {
-    console.log(`[hook-server] listening on http://127.0.0.1:${PORT}`)
-  })
+  app.listen(PORT, '127.0.0.1')
 }
 
 function tryParse(str: string): unknown {

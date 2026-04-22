@@ -73,14 +73,12 @@ export function controlMedia(
   action: 'play-pause' | 'next' | 'prev',
   sourceAppId: string
 ): void {
-  console.log('[media-control] action=%s sourceAppId=%s', action, sourceAppId)
   execFile(
     'powershell.exe',
     ['-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass',
      '-File', CONTROL_SCRIPT, '-sourceAppId', sourceAppId, '-action', action],
     { timeout: 5000 },
     (err, stdout, stderr) => {
-      if (stdout) console.log('[media-control] stdout:', stdout.trim())
       if (stderr) console.warn('[media-control] stderr:', stderr.trim())
       if (err)    console.warn('[media-control] err:', err.message)
     }
@@ -100,7 +98,7 @@ export function startMediaWatcher(win: BrowserWindow): void {
 
     worker.on('message', (data: Record<string, unknown>) => {
       if (win.isDestroyed()) return
-      if (data.__status) { console.log('[media-watcher] ready'); return }
+      if (data.__status) return
       if (data.__error)  { console.warn('[media-watcher] error:', data.__error); return }
       win.webContents.send('island:media', data)
     })

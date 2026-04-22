@@ -23,7 +23,6 @@ interface RawSession {
 
 function thumbDataUrl(buf: Buffer | undefined | null): string {
   if (!buf || buf.length < 4) return ''
-  console.log(`[thumb] len=${buf.length} bytes=${buf[0]},${buf[1]},${buf[2]},${buf[3]}`)
   const mime = (buf[0] === 0x89 && buf[1] === 0x50) ? 'image/png'
              : (buf[0] === 0xFF && buf[1] === 0xD8) ? 'image/jpeg'
              : 'image/jpeg'
