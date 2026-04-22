@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { IslandState, MediaSessionData } from '../types'
 
 // Window dimensions per state — 4px padding each side
@@ -8,7 +8,7 @@ export const STATE_SIZES: Record<IslandState['mode'], { w: number; h: number }> 
   session_start: { w: 215 + P, h: 54 + P },
   tool_active:   { w: 275 + P, h: 62 + P },
   task_done:     { w: 310 + P, h: 62 + P },
-  media:         { w: 360 + P, h: 66 + P }
+  media:         { w: 370 + P, h: 66 + P }
 }
 
 const TOOL_LABELS: Record<string, string> = {
@@ -39,36 +39,22 @@ function resize(mode: IslandState['mode']) {
 
 export interface IslandStore {
   state: IslandState
-  selectMediaSource: (idx: number) => void
 }
 
 export function useIslandStore(): IslandStore {
   const [state, setState] = useState<IslandState>({ mode: 'idle' })
   const timerRef  = useRef<ReturnType<typeof setTimeout>>()
-  const mediaRef  = useRef<MediaSessionData[] | null>(null)
+  const mediaRef  = useRef<MediaSessionData | null>(null)
   const claudeRef = useRef(false)
-  // track selected index separately — survives SMTC updates
-  const mediaIdxRef = useRef(0)
-
-  const selectMediaSource = useCallback((idx: number) => {
-    setState(prev => {
-      if (prev.mode !== 'media') return prev
-      const clamped = Math.max(0, Math.min(idx, prev.sessions.length - 1))
-      if (clamped === prev.index) return prev
-      return { ...prev, index: clamped }
-    })
-    mediaIdxRef.current = idx
-  }, [])
 
   useEffect(() => {
     function goIdleOrMedia(ms: number) {
       clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
         claudeRef.current = false
-        if (mediaRef.current?.length) {
+        if (mediaRef.current) {
           resize('media')
-          setState({ mode: 'media', sessions: mediaRef.current, index: 0 })
-          mediaIdxRef.current = 0
+          setState({ mode: 'media', session: mediaRef.current })
         } else {
           resize('idle')
           setState({ mode: 'idle' })
@@ -115,29 +101,24 @@ export function useIslandStore(): IslandStore {
       const sessions: MediaSessionData[] = incoming.map((s) => ({
         title:       String(s.title       ?? ''),
         artist:      String(s.artist      ?? ''),
+        thumbnail:   String(s.thumbnail   ?? ''),
         status:      s.status === 'playing' ? 'playing' : 'paused',
+        hasSkip:     s.hasSkip === true,
         source:      String(s.sourceAppId ?? ''),
         sourceAppId: String(s.sourceAppId ?? ''),
       }))
 
-      // only surfaces sessions that have a title
-      const active = sessions.filter(s => s.title)
-      mediaRef.current = active.length ? active : null
+      // index 0 = Windows-active session (sorted in worker); only show if has title
+      const current = sessions.find(s => s.title) ?? null
+      mediaRef.current = current
 
       if (!claudeRef.current) {
-        if (!active.length) {
+        if (!current) {
           resize('idle')
           setState({ mode: 'idle' })
-          mediaIdxRef.current = 0
         } else {
           resize('media')
-          setState(prev => {
-            // preserve selected index if session still exists
-            const prevIdx = prev.mode === 'media' ? prev.index : mediaIdxRef.current
-            const idx = prevIdx < active.length ? prevIdx : 0
-            mediaIdxRef.current = idx
-            return { mode: 'media', sessions: active, index: idx }
-          })
+          setState({ mode: 'media', session: current })
         }
       }
     })
@@ -148,5 +129,5 @@ export function useIslandStore(): IslandStore {
     }
   }, [])
 
-  return { state, selectMediaSource }
+  return { state }
 }

@@ -8,23 +8,29 @@ import type { BrowserWindow } from 'electron'
 // ── Per-session media control ─────────────────────────────────────────────────
 //
 // Priority:
-//  1. WinRT TryTogglePlayPauseAsync/TrySkipNextAsync/TrySkipPreviousAsync on the
-//     specific session — the ONLY approach that works for UWP apps (Spotify, etc.)
-//     Poll IAsyncInfo.Status (0=Started,1=Completed) to wait without AsTask<T>.
-//  2. PostMessage(WM_APPCOMMAND) to app window — fallback for Win32 apps (Chrome).
+//  1. WinRT TryTogglePlayPauseAsync/TrySkipNextAsync/TrySkipPreviousAsync — works
+//     for UWP/Store apps (Spotify). AsTask<T> overload selected precisely by
+//     IsGenericMethod + IAsyncOperation`1 param type to avoid picking IAsyncAction.
+//  2. PostMessage(WM_APPCOMMAND) — fallback for Win32 apps (Chrome, etc).
 //
 const CONTROL_PS1 = [
   'param([string]$sourceAppId, [string]$action)',
+  '$winrtOk = $false',
   'try {',
-  // ── 1. WinRT direct session control ──
   '    Add-Type -AssemblyName System.Runtime.WindowsRuntime',
   '    [void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]',
-  '    $asTask = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq "AsTask" -and $_.GetParameters().Count -eq 1 })[0]',
+  // Select AsTask<T>(IAsyncOperation<T>) — must check IsGenericMethod AND param type name
+  // to avoid accidentally picking the IAsyncAction overload (also 1 param, not generic)
+  '    $asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {',
+  '        $_.Name -eq "AsTask" -and $_.IsGenericMethod -and $_.GetParameters().Count -eq 1 -and',
+  '        $_.GetParameters()[0].ParameterType.Name -eq "IAsyncOperation``1"',
+  '    } | Select-Object -First 1',
   '    $mgrTask = $asTask.MakeGenericMethod([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]).Invoke($null,',
   '        @([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()))',
-  '    $mgrTask.Wait()',
+  '    $mgrTask.Wait() | Out-Null',
   '    $mgr = $mgrTask.Result',
   '    $session = $mgr.GetSessions() | Where-Object { $_.SourceAppUserModelId -eq $sourceAppId } | Select-Object -First 1',
+  '    if (-not $session) { $session = $mgr.GetSessions() | Where-Object { ($_.SourceAppUserModelId -like "*$sourceAppId*") -or ($sourceAppId -like "*$($_.SourceAppUserModelId)*") } | Select-Object -First 1 }',
   '    if (-not $session) { $session = $mgr.GetCurrentSession() }',
   '    if ($session) {',
   '        $op = switch ($action) {',
@@ -34,15 +40,13 @@ const CONTROL_PS1 = [
   '            default      { $null }',
   '        }',
   '        if ($op) {',
-  // Poll IAsyncInfo.Status: 0=Started, 1=Completed, 2=Canceled, 3=Error
-  '            $dl = (Get-Date).AddMilliseconds(1500)',
-  '            while ([int]$op.Status -eq 0 -and (Get-Date) -lt $dl) {',
-  '                [System.Threading.Thread]::Sleep(15)',
-  '            }',
-  '            exit 0',
+  '            $opTask = $asTask.MakeGenericMethod([System.Boolean]).Invoke($null, @($op))',
+  '            $opTask.Wait([System.Threading.Timeout]::Infinite) | Out-Null',
+  '            if ($opTask.Result -eq $true) { $winrtOk = $true }',
   '        }',
   '    }',
   '} catch { }',
+  'if ($winrtOk) { exit 0 }',
   // ── 2. Win32 fallback: PostMessage(WM_APPCOMMAND) ──
   'try {',
   '    Add-Type -TypeDefinition @"',
@@ -52,7 +56,7 @@ const CONTROL_PS1 = [
   '    $cmd = switch ($action) { "play-pause" {14} "next" {11} "prev" {12} default {0} }',
   '    if ($cmd -eq 0) { exit 0 }',
   '    $lp  = [IntPtr]($cmd * 65536)',
-  '    $pn  = ($sourceAppId -replace ".*!", "") -replace "\\.exe$", ""',
+  '    $pn  = ($sourceAppId -replace ".*!", "") -replace ".*[\\\\/]", "" -replace "\\.exe$", ""',
   '    foreach ($p in (Get-Process -Name $pn -ErrorAction SilentlyContinue)) {',
   '        if ($p.MainWindowHandle -ne [IntPtr]::Zero) {',
   '            [MC2]::PostMessage($p.MainWindowHandle, 0x0319, $p.MainWindowHandle, $lp) | Out-Null',
@@ -69,12 +73,17 @@ export function controlMedia(
   action: 'play-pause' | 'next' | 'prev',
   sourceAppId: string
 ): void {
+  console.log('[media-control] action=%s sourceAppId=%s', action, sourceAppId)
   execFile(
     'powershell.exe',
     ['-NonInteractive', '-NoProfile', '-ExecutionPolicy', 'Bypass',
      '-File', CONTROL_SCRIPT, '-sourceAppId', sourceAppId, '-action', action],
     { timeout: 5000 },
-    (err) => { if (err) console.warn('[media-control]', err.message) }
+    (err, stdout, stderr) => {
+      if (stdout) console.log('[media-control] stdout:', stdout.trim())
+      if (stderr) console.warn('[media-control] stderr:', stderr.trim())
+      if (err)    console.warn('[media-control] err:', err.message)
+    }
   )
 }
 

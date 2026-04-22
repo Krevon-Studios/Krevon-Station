@@ -2,10 +2,10 @@ import { useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Play, Pause, SkipBack, SkipForward,
-  Check, Zap, Music2, ChevronLeft, ChevronRight
+  Check, Zap, Music2
 } from 'lucide-react'
 import { useIslandStore } from '../store/useIslandStore'
-import type { IslandState, MediaSessionData } from '../types'
+import type { IslandState } from '../types'
 
 const fade = {
   enter:   { opacity: 0, scale: 0.9,  filter: 'blur(4px)' },
@@ -109,102 +109,62 @@ function DoneContent({ state }: { state: Extract<IslandState, { mode: 'task_done
   )
 }
 
-function MediaContent({
-  state,
-  onSelectSource
-}: {
-  state: Extract<IslandState, { mode: 'media' }>
-  onSelectSource: (idx: number) => void
-}) {
-  const session: MediaSessionData = state.sessions[state.index] ?? state.sessions[0]
-  if (!session) return null
-
-  const isPlaying    = session.status === 'playing'
-  const multiSource  = state.sessions.length > 1
-  const title        = session.title.length  > 22 ? session.title.slice(0, 20)  + '…' : session.title
-  const artist       = session.artist.length > 18 ? session.artist.slice(0, 16) + '…' : session.artist
-  const sourceName   = sourceLabel(session.sourceAppId)
+function MediaContent({ state }: { state: Extract<IslandState, { mode: 'media' }> }) {
+  const { session } = state
+  const isPlaying = session.status === 'playing'
+  const title     = session.title.length  > 22 ? session.title.slice(0, 20)  + '…' : session.title
+  const artist    = session.artist.length > 18 ? session.artist.slice(0, 16) + '…' : session.artist
 
   const ctrl = (action: 'play-pause' | 'next' | 'prev') => (e: React.MouseEvent) => {
     e.stopPropagation()
     window.island.controlMedia(action, session.sourceAppId)
   }
 
-  const prevSource = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onSelectSource((state.index - 1 + state.sessions.length) % state.sessions.length)
-  }
-  const nextSource = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    onSelectSource((state.index + 1) % state.sessions.length)
-  }
+  const skipColor = session.hasSkip ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.18)'
 
   return (
     <motion.div key="media" variants={fade} initial="enter" animate="visible" exit="exit"
       className="flex items-center justify-between w-full px-[14px] gap-3">
 
-      {/* Left — icon + track info */}
+      {/* Left — thumbnail/icon + track info */}
       <div className="flex items-center gap-[9px] min-w-0">
-        <div className={`w-[22px] h-[22px] rounded-full flex items-center justify-center shrink-0 border
-          ${isPlaying ? 'bg-[#34D399]/12 border-[#34D399]/20' : 'bg-white/5 border-white/10'}`}>
-          {isPlaying
-            ? <EqBars />
-            : <Music2 size={10} color="rgba(255,255,255,0.3)" strokeWidth={1.8} />
-          }
+        <div className="relative w-[30px] h-[30px] shrink-0">
+          {session.thumbnail ? (
+            <img
+              src={session.thumbnail}
+              alt=""
+              className="w-full h-full rounded-[5px] object-cover"
+              style={{ imageRendering: 'auto' }}
+            />
+          ) : (
+            <div className={`w-full h-full rounded-[5px] flex items-center justify-center border
+              ${isPlaying ? 'bg-[#34D399]/12 border-[#34D399]/20' : 'bg-white/5 border-white/10'}`}>
+              <Music2 size={12} color="rgba(255,255,255,0.3)" strokeWidth={1.8} />
+            </div>
+          )}
+          {/* playing indicator dot overlaid on thumbnail */}
+          {session.thumbnail && isPlaying && (
+            <div className="absolute -bottom-[2px] -right-[2px] w-[8px] h-[8px] rounded-full bg-[#060606] flex items-center justify-center">
+              <span className="w-[5px] h-[5px] rounded-full bg-[#34D399]" />
+            </div>
+          )}
         </div>
         <div className="flex flex-col gap-[3px] min-w-0">
           <span className="text-[12px] font-semibold text-white leading-none tracking-tight whitespace-nowrap">
             {title || 'Now Playing'}
           </span>
-
-          {/* Artist + source row */}
           <div className="flex items-center gap-[5px] text-[10px] leading-none">
             {artist && <span className="text-white/40 whitespace-nowrap">{artist}</span>}
             {artist && <Sep />}
-
-            {/* Source: arrows when multiple sessions */}
-            {multiSource ? (
-              <div className="flex items-center gap-[2px]">
-                <CtrlBtn onClick={prevSource} label="Previous source" small>
-                  <ChevronLeft size={8} strokeWidth={2.5} color="rgba(255,255,255,0.45)" />
-                </CtrlBtn>
-                <span className="text-white/50 whitespace-nowrap select-none min-w-0">
-                  {sourceName}
-                </span>
-                <CtrlBtn onClick={nextSource} label="Next source" small>
-                  <ChevronRight size={8} strokeWidth={2.5} color="rgba(255,255,255,0.45)" />
-                </CtrlBtn>
-              </div>
-            ) : (
-              <span className="text-white/25 whitespace-nowrap">{sourceName}</span>
-            )}
-
-            {/* Dot indicator when multiple sessions */}
-            {multiSource && (
-              <div className="flex items-center gap-[3px] ml-[2px]">
-                {state.sessions.map((_, i) => (
-                  <span
-                    key={i}
-                    className="rounded-full transition-all duration-200"
-                    style={{
-                      width:   i === state.index ? '5px' : '3px',
-                      height:  '3px',
-                      background: i === state.index
-                        ? 'rgba(255,255,255,0.6)'
-                        : 'rgba(255,255,255,0.2)',
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+            <span className="text-white/25 whitespace-nowrap">{sourceLabel(session.sourceAppId)}</span>
           </div>
         </div>
       </div>
 
       {/* Right — playback controls */}
       <div className="flex items-center gap-[2px] shrink-0">
-        <CtrlBtn onClick={ctrl('prev')} label="Previous track">
-          <SkipBack size={12} strokeWidth={2} color="rgba(255,255,255,0.65)" />
+        <CtrlBtn onClick={ctrl('prev')} label="Previous track" disabled={!session.hasSkip}>
+          <SkipBack size={12} strokeWidth={2} color={skipColor} />
         </CtrlBtn>
         <CtrlBtn onClick={ctrl('play-pause')} label={isPlaying ? 'Pause' : 'Play'} primary>
           {isPlaying
@@ -212,8 +172,8 @@ function MediaContent({
             : <Play  size={11} strokeWidth={2.2} color="white" />
           }
         </CtrlBtn>
-        <CtrlBtn onClick={ctrl('next')} label="Next track">
-          <SkipForward size={12} strokeWidth={2} color="rgba(255,255,255,0.65)" />
+        <CtrlBtn onClick={ctrl('next')} label="Next track" disabled={!session.hasSkip}>
+          <SkipForward size={12} strokeWidth={2} color={skipColor} />
         </CtrlBtn>
       </div>
     </motion.div>
@@ -223,20 +183,23 @@ function MediaContent({
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function CtrlBtn({
-  children, onClick, label, primary, small
+  children, onClick, label, primary, small, disabled
 }: {
-  children: React.ReactNode
-  onClick:  (e: React.MouseEvent) => void
-  label:    string
-  primary?: boolean
-  small?:   boolean
+  children:  React.ReactNode
+  onClick:   (e: React.MouseEvent) => void
+  label:     string
+  primary?:  boolean
+  small?:    boolean
+  disabled?: boolean
 }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
       aria-label={label}
+      aria-disabled={disabled}
       className={[
-        'flex items-center justify-center rounded-full transition-all duration-100 active:scale-90 cursor-default',
+        'flex items-center justify-center rounded-full transition-all duration-100 cursor-default',
+        disabled ? 'opacity-40' : 'active:scale-90',
         primary ? 'w-[26px] h-[26px] bg-white/12 hover:bg-white/18'
         : small  ? 'w-[14px] h-[14px] hover:bg-white/10'
         :          'w-[22px] h-[22px] hover:bg-white/8',
@@ -248,18 +211,6 @@ function CtrlBtn({
   )
 }
 
-function EqBars() {
-  return (
-    <div className="flex items-end gap-[2px] h-[10px]">
-      <span className="w-[2px] bg-[#34D399] rounded-full"
-        style={{ height: '50%',  animation: 'eq1 0.7s ease-in-out infinite' }} />
-      <span className="w-[2px] bg-[#34D399] rounded-full"
-        style={{ height: '100%', animation: 'eq2 0.7s ease-in-out infinite 0.12s' }} />
-      <span className="w-[2px] bg-[#34D399] rounded-full"
-        style={{ height: '65%',  animation: 'eq1 0.7s ease-in-out infinite 0.25s' }} />
-    </div>
-  )
-}
 
 function ClaudeIcon() {
   return (
@@ -285,7 +236,7 @@ function Sep() {
 // ── Main island ──────────────────────────────────────────────────────────────
 
 export function Island() {
-  const { state, selectMediaSource } = useIslandStore()
+  const { state } = useIslandStore()
   const pillRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -318,9 +269,7 @@ export function Island() {
           {state.mode === 'session_start' && <SessionContent key="session" state={state} />}
           {state.mode === 'tool_active'   && <ToolContent    key="tool"    state={state} />}
           {state.mode === 'task_done'     && <DoneContent    key="done"    state={state} />}
-          {state.mode === 'media'         && (
-            <MediaContent key="media" state={state} onSelectSource={selectMediaSource} />
-          )}
+          {state.mode === 'media'         && <MediaContent key="media" state={state} />}
         </AnimatePresence>
       </div>
     </div>

@@ -8,19 +8,38 @@ if (!parentPort) process.exit(1)
 
 const PLAYING = 4
 
+// Browsers report playbackType=Music even for video — detect by AUMID instead
+const BROWSERS = ['chrome', 'firefox', 'msedge', 'edge', 'opera', 'brave', 'safari']
+function isBrowser(appId: string): boolean {
+  const s = appId.toLowerCase()
+  return BROWSERS.some(b => s.includes(b))
+}
+
 interface RawSession {
   sourceAppId?: string
-  media?:       { title?: string; artist?: string } | null
-  playback?:    { playbackStatus?: number }          | null
+  media?:       { title?: string; artist?: string; thumbnail?: Buffer } | null
+  playback?:    { playbackStatus?: number }                             | null
+}
+
+function thumbDataUrl(buf: Buffer | undefined | null): string {
+  if (!buf || buf.length < 4) return ''
+  console.log(`[thumb] len=${buf.length} bytes=${buf[0]},${buf[1]},${buf[2]},${buf[3]}`)
+  const mime = (buf[0] === 0x89 && buf[1] === 0x50) ? 'image/png'
+             : (buf[0] === 0xFF && buf[1] === 0xD8) ? 'image/jpeg'
+             : 'image/jpeg'
+  return `data:${mime};base64,${buf.toString('base64')}`
 }
 
 function toData(s: RawSession) {
+  const appId = s.sourceAppId ?? ''
   return {
-    title:       s.media?.title  ?? '',
-    artist:      s.media?.artist ?? '',
+    title:       s.media?.title     ?? '',
+    artist:      s.media?.artist    ?? '',
+    thumbnail:   thumbDataUrl(s.media?.thumbnail),
     status:      s.playback?.playbackStatus === PLAYING ? 'playing' : 'paused',
-    sourceAppId: s.sourceAppId ?? '',
-    source:      s.sourceAppId ?? '',  // display name mapped in renderer
+    hasSkip:     !isBrowser(appId),
+    sourceAppId: appId,
+    source:      appId,
   }
 }
 
@@ -36,7 +55,16 @@ try {
 
   const sendAll = () => {
     const all = SMTCMonitor.getMediaSessions()
-    parentPort!.postMessage({ sessions: all.map(toData) })
+    const current = SMTCMonitor.getCurrentMediaSession()
+    const currentId = current?.sourceAppId
+
+    let sorted = all
+    if (currentId) {
+      const idx = all.findIndex(s => s.sourceAppId === currentId)
+      if (idx > 0) sorted = [all[idx], ...all.slice(0, idx), ...all.slice(idx + 1)]
+    }
+
+    parentPort!.postMessage({ sessions: sorted.map(toData) })
   }
 
   sendAll()
