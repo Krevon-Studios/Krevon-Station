@@ -29,6 +29,6 @@ contextBridge.exposeInMainWorld('island', {
   },
 
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse', ignore),
-  setWindowSize: (_w: number, _h: number) => {}
+  setWindowSize: (_w: number, _h: number) => {},
+  setHitBox: (w: number, h: number) => ipcRenderer.send('set-hit-box', w, h)
 })
-

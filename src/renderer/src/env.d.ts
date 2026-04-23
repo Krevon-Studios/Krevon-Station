@@ -8,6 +8,7 @@ interface IslandAPI {
   removeAllListeners: () => void
   setIgnoreMouse:     (ignore: boolean) => void
   setWindowSize:      (w: number, h: number) => void
+  setHitBox:          (w: number, h: number) => void
 }
 
 declare interface Window {

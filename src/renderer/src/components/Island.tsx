@@ -323,6 +323,13 @@ export function Island() {
 
   // Hover state is driven entirely by the main process via screen.getCursorScreenPoint()
   // polling — no renderer-side mousemove math or getBoundingClientRect needed.
+  // Update the hit-box in the main process when the target size changes.
+  // This prevents the "invisible boundary" issue where the main process thinks
+  // the entire transparent Electron window is the hover zone.
+  useEffect(() => {
+    window.island.setHitBox(target.w, target.h)
+  }, [target.w, target.h])
+
   useEffect(() => {
     window.island.onHover((over) => setHovered(over))
     return () => window.island.removeAllListeners()

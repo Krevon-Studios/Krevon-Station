@@ -19,23 +19,25 @@ app.whenReady().then(() => {
   createTray(win)
 
   // ── Hover detection (main process polling) ─────────────────────────────────
-  // screen.getCursorScreenPoint() is polled every 16 ms in the main process.
-  // This is the most reliable approach for transparent Electron windows:
-  // - Zero IPC round-trip latency (detection happens right here)
-  // - No dependence on {forward:true} forwarding, which can miss events
-  // - setIgnoreMouseEvents is toggled immediately, in the same tick
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { screen } = require('electron') as typeof import('electron')
 
   let hoverActive = false
+  let hitBox = { w: 160, h: 32 } // default to IDLE_CLOSED
+
+  ipcMain.on('set-hit-box', (_event, w: number, h: number) => {
+    hitBox = { w, h }
+  })
 
   setInterval(() => {
     const { x, y } = screen.getCursorScreenPoint()
     const b = win.getBounds()
 
+    // The pill is horizontally centered in the window, flush with the top edge
+    const cx = b.x + b.width / 2
     const over =
-      x >= b.x && x <= b.x + b.width &&
-      y >= b.y && y <= b.y + b.height
+      x >= cx - hitBox.w / 2 && x <= cx + hitBox.w / 2 &&
+      y >= b.y && y <= b.y + hitBox.h
 
     if (over === hoverActive) return
 
