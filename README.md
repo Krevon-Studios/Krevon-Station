@@ -25,7 +25,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 | App shell | Electron 31 |
 | Build | electron-vite + Vite 5 |
 | UI | React 18 + Tailwind CSS + Framer Motion |
-| Icons | Lucide React |
+| Icons | Lucide React + Custom SVGs |
 | Package manager | Bun |
 | Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
 | Hook server | Express on `127.0.0.1:7823` |
@@ -173,6 +173,8 @@ PowerShell script (di-control.ps1 in %TEMP%)
 ### Media Monitoring
 
 Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-stable). Fires events on any SMTC change → sends full sessions array to main → forwards to renderer via `island:media` IPC. Starts 1.5s after app ready to avoid blocking main thread startup.
+
+**Multi-Source Tracking:** When multiple media sources are active (e.g. Spotify and Chrome), users can cycle through them using arrow buttons in the pill. The app tracks the active session by its `sourceAppId` rather than index, preventing UI jumps when Windows dynamically re-orders the underlying session array based on recent playback.
 
 ---
 

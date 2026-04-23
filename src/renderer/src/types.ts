@@ -15,4 +15,4 @@ export type IslandState =
   | { mode: 'session_start'; sessionId: string }
   | { mode: 'tool_active'; toolName: string; displayLabel: string }
   | { mode: 'task_done'; cost: number; turns: number; durationMs: number }
-  | { mode: 'media'; session: MediaSessionData }
+  | { mode: 'media'; session: MediaSessionData; sessions: MediaSessionData[]; activeIndex: number }

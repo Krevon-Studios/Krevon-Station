@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Play, Pause, SkipBack, SkipForward,
-  Check, Zap, Music2
+  Play, Pause,
+  Check, Zap, Music2, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { useIslandStore } from '../store/useIslandStore'
 import type { IslandState } from '../types'
@@ -161,7 +161,13 @@ function DoneExpandedContent({ state }: { state: Extract<IslandState, { mode: 't
 
 // ── Content: Media ─────────────────────────────────────────────────────────────
 
-function MediaExpandedContent({ state }: { state: Extract<IslandState, { mode: 'media' }> }) {
+function MediaExpandedContent({
+  state, nextMedia, prevMedia
+}: {
+  state: Extract<IslandState, { mode: 'media' }>
+  nextMedia: () => void
+  prevMedia: () => void
+}) {
   const { session } = state
   const isPlaying = session.status === 'playing'
 
@@ -169,8 +175,6 @@ function MediaExpandedContent({ state }: { state: Extract<IslandState, { mode: '
     e.stopPropagation()
     window.island.controlMedia(action, session.sourceAppId)
   }
-
-  const skipColor = session.hasSkip ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)'
 
   return (
     <motion.div
@@ -203,8 +207,20 @@ function MediaExpandedContent({ state }: { state: Extract<IslandState, { mode: '
         {/* Source + settings row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-[5px]">
+            {state.sessions?.length > 1 && (
+              <button onClick={(e) => { e.stopPropagation(); prevMedia() }} className="active:scale-90 text-white/30 hover:text-white/80 transition-colors">
+                <ChevronLeft size={12} strokeWidth={3} />
+              </button>
+            )}
             <Music2 size={9} color="rgba(255,255,255,0.3)" />
-            <span className="text-[10px] text-white/30 tracking-wide">{sourceLabel(session.sourceAppId)}</span>
+            <span className="text-[10px] text-white/30 tracking-wide">
+              {sourceLabel(session.sourceAppId)} {state.sessions?.length > 1 ? `(${state.activeIndex + 1}/${state.sessions.length})` : ''}
+            </span>
+            {state.sessions?.length > 1 && (
+              <button onClick={(e) => { e.stopPropagation(); nextMedia() }} className="active:scale-90 text-white/30 hover:text-white/80 transition-colors">
+                <ChevronRight size={12} strokeWidth={3} />
+              </button>
+            )}
           </div>
           <div className={`w-[6px] h-[6px] rounded-full ${isPlaying ? 'bg-[#34D399]' : 'bg-white/20'}`}
             style={isPlaying ? { boxShadow: '0 0 6px #34D399' } : {}} />
@@ -221,18 +237,18 @@ function MediaExpandedContent({ state }: { state: Extract<IslandState, { mode: '
         </div>
 
         {/* Controls */}
-        <div className="flex items-center gap-[6px]">
+        <div className="flex items-center gap-[12px] mt-1">
           <CtrlBtn onClick={ctrl('prev')} label="Previous" disabled={!session.hasSkip}>
-            <SkipBack size={13} strokeWidth={2} color={skipColor} />
+            <PrevIcon size={14} />
           </CtrlBtn>
-          <CtrlBtn onClick={ctrl('play-pause')} label={isPlaying ? 'Pause' : 'Play'} primary>
+          <CtrlBtn onClick={ctrl('play-pause')} label={isPlaying ? 'Pause' : 'Play'}>
             {isPlaying
-              ? <Pause size={12} strokeWidth={2.2} color="white" />
-              : <Play  size={12} strokeWidth={2.2} color="white" style={{ marginLeft: 1 }} />
+              ? <Pause size={20} fill="white" color="white" />
+              : <Play  size={20} fill="white" color="white" />
             }
           </CtrlBtn>
           <CtrlBtn onClick={ctrl('next')} label="Next" disabled={!session.hasSkip}>
-            <SkipForward size={13} strokeWidth={2} color={skipColor} />
+            <NextIcon size={14} />
           </CtrlBtn>
         </div>
       </div>
@@ -272,12 +288,11 @@ function ClosedContent({ state }: { state: IslandState }) {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function CtrlBtn({
-  children, onClick, label, primary, disabled
+  children, onClick, label, disabled
 }: {
   children:  React.ReactNode
   onClick:   (e: React.MouseEvent) => void
   label:     string
-  primary?:  boolean
   disabled?: boolean
 }) {
   return (
@@ -287,15 +302,34 @@ function CtrlBtn({
       aria-disabled={disabled}
       className={[
         'flex items-center justify-center rounded-full transition-all duration-150 cursor-default select-none',
-        disabled ? 'opacity-30' : 'active:scale-90',
-        primary
-          ? 'w-[30px] h-[30px] bg-white/15 hover:bg-white/22 border border-white/10'
-          : 'w-[26px] h-[26px] hover:bg-white/10',
+        disabled ? 'opacity-30' : 'active:scale-90 opacity-80 hover:opacity-100',
       ].join(' ')}
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
     >
       {children}
     </button>
+  )
+}
+
+
+
+function NextIcon({ size }: { size: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="white">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M2 5v14c0 .86 1.012 1.318 1.659 .753l8 -7a1 1 0 0 0 0 -1.506l-8 -7c-.647 -.565 -1.659 -.106 -1.659 .753z" />
+      <path d="M13 5v14c0 .86 1.012 1.318 1.659 .753l8 -7a1 1 0 0 0 0 -1.506l-8 -7c-.647 -.565 -1.659 -.106 -1.659 .753z" />
+    </svg>
+  )
+}
+
+function PrevIcon({ size }: { size: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="white">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M20.341 4.247l-8 7a1 1 0 0 0 0 1.506l8 7c.647 .565 1.659 .106 1.659 -.753v-14c0 -.86 -1.012 -1.318 -1.659 -.753z" />
+      <path d="M9.341 4.247l-8 7a1 1 0 0 0 0 1.506l8 7c.647 .565 1.659 .106 1.659 -.753v-14c0 -.86 -1.012 -1.318 -1.659 -.753z" />
+    </svg>
   )
 }
 
@@ -315,7 +349,7 @@ function Sep() {
 }
 
 export function Island() {
-  const { state } = useIslandStore()
+  const { state, nextMedia, prevMedia } = useIslandStore()
   const [hovered, setHovered] = useState(false)
 
   const isExpanded = hovered
@@ -331,8 +365,7 @@ export function Island() {
   }, [target.w, target.h])
 
   useEffect(() => {
-    window.island.onHover((over) => setHovered(over))
-    return () => window.island.removeAllListeners()
+    return window.island.onHover((over) => setHovered(over))
   }, [])
 
   return (
@@ -372,7 +405,7 @@ export function Island() {
             ) : state.mode === 'task_done' ? (
               <DoneExpandedContent key="done-exp" state={state} />
             ) : state.mode === 'media' ? (
-              <MediaExpandedContent key="media-exp" state={state} />
+              <MediaExpandedContent key="media-exp" state={state} nextMedia={nextMedia} prevMedia={prevMedia} />
             ) : null}
           </AnimatePresence>
         </div>

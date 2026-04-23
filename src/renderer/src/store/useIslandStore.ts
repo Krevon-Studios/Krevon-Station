@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { IslandState, MediaSessionData } from '../types'
 
 const TOOL_LABELS: Record<string, string> = {
@@ -24,28 +24,45 @@ function toolLabel(name: string): string {
 
 export interface IslandStore {
   state: IslandState
+  nextMedia: () => void
+  prevMedia: () => void
 }
 
 export function useIslandStore(): IslandStore {
   const [state, setState] = useState<IslandState>({ mode: 'idle' })
   const timerRef  = useRef<ReturnType<typeof setTimeout>>()
-  const mediaRef  = useRef<MediaSessionData | null>(null)
+  const mediaSessionsRef  = useRef<MediaSessionData[]>([])
+  const mediaActiveIndexRef = useRef<number>(0)
   const claudeRef = useRef(false)
+
+  const updateMediaState = useCallback(() => {
+    const sessions = mediaSessionsRef.current
+    if (sessions.length === 0) {
+      if (!claudeRef.current) setState({ mode: 'idle' })
+    } else {
+      if (mediaActiveIndexRef.current >= sessions.length) mediaActiveIndexRef.current = 0
+      if (mediaActiveIndexRef.current < 0) mediaActiveIndexRef.current = sessions.length - 1
+      if (!claudeRef.current) {
+        setState({
+          mode: 'media',
+          session: sessions[mediaActiveIndexRef.current],
+          sessions,
+          activeIndex: mediaActiveIndexRef.current
+        })
+      }
+    }
+  }, [])
 
   useEffect(() => {
     function goIdleOrMedia(ms: number) {
       clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
         claudeRef.current = false
-        if (mediaRef.current) {
-          setState({ mode: 'media', session: mediaRef.current })
-        } else {
-          setState({ mode: 'idle' })
-        }
+        updateMediaState()
       }, ms)
     }
 
-    window.island.onSessionStart((raw) => {
+    const unsubStart = window.island.onSessionStart((raw) => {
       const d = raw as Record<string, unknown>
       clearTimeout(timerRef.current)
       claudeRef.current = true
@@ -53,7 +70,7 @@ export function useIslandStore(): IslandStore {
       goIdleOrMedia(2500)
     })
 
-    window.island.onToolActive((raw) => {
+    const unsubTool = window.island.onToolActive((raw) => {
       const d = raw as Record<string, unknown>
       clearTimeout(timerRef.current)
       claudeRef.current = true
@@ -61,7 +78,7 @@ export function useIslandStore(): IslandStore {
       setState({ mode: 'tool_active', toolName: name, displayLabel: toolLabel(name) })
     })
 
-    window.island.onTaskDone((raw) => {
+    const unsubDone = window.island.onTaskDone((raw) => {
       const d = raw as Record<string, unknown>
       clearTimeout(timerRef.current)
       const result = (d.result ?? d) as Record<string, unknown>
@@ -74,37 +91,57 @@ export function useIslandStore(): IslandStore {
       goIdleOrMedia(5000)
     })
 
-    window.island.onMedia((raw) => {
+    const unsubMedia = window.island.onMedia((raw) => {
       const d = raw as { sessions?: unknown[] }
       const incoming = (d.sessions ?? []) as Array<Record<string, unknown>>
 
-      const sessions: MediaSessionData[] = incoming.map((s) => ({
-        title:       String(s.title       ?? ''),
-        artist:      String(s.artist      ?? ''),
-        thumbnail:   String(s.thumbnail   ?? ''),
-        status:      s.status === 'playing' ? 'playing' : 'paused',
-        hasSkip:     s.hasSkip === true,
-        source:      String(s.sourceAppId ?? ''),
-        sourceAppId: String(s.sourceAppId ?? ''),
-      }))
+      const sessions: MediaSessionData[] = incoming
+        .map((s) => ({
+          title:       String(s.title       ?? ''),
+          artist:      String(s.artist      ?? ''),
+          thumbnail:   String(s.thumbnail   ?? ''),
+          status:      (s.status === 'playing' ? 'playing' : 'paused') as 'playing' | 'paused',
+          hasSkip:     s.hasSkip === true,
+          source:      String(s.sourceAppId ?? ''),
+          sourceAppId: String(s.sourceAppId ?? ''),
+        }))
+        .filter((s) => s.title) // only keep valid sessions
 
-      const current = sessions.find(s => s.title) ?? null
-      mediaRef.current = current
+      const previousActiveSession = mediaSessionsRef.current[mediaActiveIndexRef.current]
+      mediaSessionsRef.current = sessions
 
-      if (!claudeRef.current) {
-        if (!current) {
-          setState({ mode: 'idle' })
+      if (previousActiveSession && sessions.length > 0) {
+        const newIndex = sessions.findIndex(s => s.sourceAppId === previousActiveSession.sourceAppId)
+        if (newIndex !== -1) {
+          mediaActiveIndexRef.current = newIndex
         } else {
-          setState({ mode: 'media', session: current })
+          mediaActiveIndexRef.current = 0
         }
+      } else if (sessions.length === 0) {
+        mediaActiveIndexRef.current = 0
       }
+
+      updateMediaState()
     })
 
     return () => {
       clearTimeout(timerRef.current)
-      window.island.removeAllListeners()
+      unsubStart()
+      unsubTool()
+      unsubDone()
+      unsubMedia()
     }
-  }, [])
+  }, [updateMediaState])
 
-  return { state }
+  return {
+    state,
+    nextMedia: () => {
+      mediaActiveIndexRef.current++
+      updateMediaState()
+    },
+    prevMedia: () => {
+      mediaActiveIndexRef.current--
+      updateMediaState()
+    }
+  }
 }

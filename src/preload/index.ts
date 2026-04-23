@@ -1,21 +1,35 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('island', {
-  onSessionStart: (cb: (data: unknown) => void) =>
-    ipcRenderer.on('island:session-start', (_e, d) => cb(d)),
+  onSessionStart: (cb: (data: unknown) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d)
+    ipcRenderer.on('island:session-start', fn)
+    return () => ipcRenderer.removeListener('island:session-start', fn)
+  },
 
-  onToolActive: (cb: (data: unknown) => void) =>
-    ipcRenderer.on('island:tool-active', (_e, d) => cb(d)),
+  onToolActive: (cb: (data: unknown) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d)
+    ipcRenderer.on('island:tool-active', fn)
+    return () => ipcRenderer.removeListener('island:tool-active', fn)
+  },
 
-  onTaskDone: (cb: (data: unknown) => void) =>
-    ipcRenderer.on('island:task-done', (_e, d) => cb(d)),
+  onTaskDone: (cb: (data: unknown) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d)
+    ipcRenderer.on('island:task-done', fn)
+    return () => ipcRenderer.removeListener('island:task-done', fn)
+  },
 
-  onMedia: (cb: (data: unknown) => void) =>
-    ipcRenderer.on('island:media', (_e, d) => cb(d)),
+  onMedia: (cb: (data: unknown) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d)
+    ipcRenderer.on('island:media', fn)
+    return () => ipcRenderer.removeListener('island:media', fn)
+  },
 
-  // Hover state driven by main-process polling (screen.getCursorScreenPoint)
-  onHover: (cb: (over: boolean) => void) =>
-    ipcRenderer.on('island:hover', (_e, over) => cb(over as boolean)),
+  onHover: (cb: (over: boolean) => void) => {
+    const fn = (_e: any, over: unknown) => cb(over as boolean)
+    ipcRenderer.on('island:hover', fn)
+    return () => ipcRenderer.removeListener('island:hover', fn)
+  },
 
   controlMedia: (action: 'play-pause' | 'next' | 'prev', sourceAppId: string) =>
     ipcRenderer.send('control-media', action, sourceAppId),
