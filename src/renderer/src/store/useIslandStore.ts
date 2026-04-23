@@ -1,16 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { IslandState, MediaSessionData } from '../types'
 
-// Window dimensions per state — 4px padding each side
-const P = 8
-export const STATE_SIZES: Record<IslandState['mode'], { w: number; h: number }> = {
-  idle:          { w: 165 + P, h: 44 + P },
-  session_start: { w: 215 + P, h: 54 + P },
-  tool_active:   { w: 275 + P, h: 62 + P },
-  task_done:     { w: 310 + P, h: 62 + P },
-  media:         { w: 370 + P, h: 66 + P }
-}
-
 const TOOL_LABELS: Record<string, string> = {
   read:       'Reading file',
   write:      'Writing file',
@@ -32,11 +22,6 @@ function toolLabel(name: string): string {
   return name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-function resize(mode: IslandState['mode']) {
-  const s = STATE_SIZES[mode]
-  window.island.setWindowSize(s.w, s.h)
-}
-
 export interface IslandStore {
   state: IslandState
 }
@@ -53,10 +38,8 @@ export function useIslandStore(): IslandStore {
       timerRef.current = setTimeout(() => {
         claudeRef.current = false
         if (mediaRef.current) {
-          resize('media')
           setState({ mode: 'media', session: mediaRef.current })
         } else {
-          resize('idle')
           setState({ mode: 'idle' })
         }
       }, ms)
@@ -66,7 +49,6 @@ export function useIslandStore(): IslandStore {
       const d = raw as Record<string, unknown>
       clearTimeout(timerRef.current)
       claudeRef.current = true
-      resize('session_start')
       setState({ mode: 'session_start', sessionId: String(d.session_id ?? '') })
       goIdleOrMedia(2500)
     })
@@ -76,7 +58,6 @@ export function useIslandStore(): IslandStore {
       clearTimeout(timerRef.current)
       claudeRef.current = true
       const name = String(d.tool_name ?? 'tool')
-      resize('tool_active')
       setState({ mode: 'tool_active', toolName: name, displayLabel: toolLabel(name) })
     })
 
@@ -84,7 +65,6 @@ export function useIslandStore(): IslandStore {
       const d = raw as Record<string, unknown>
       clearTimeout(timerRef.current)
       const result = (d.result ?? d) as Record<string, unknown>
-      resize('task_done')
       setState({
         mode: 'task_done',
         cost:       Number(result.total_cost_usd ?? 0),
@@ -108,16 +88,13 @@ export function useIslandStore(): IslandStore {
         sourceAppId: String(s.sourceAppId ?? ''),
       }))
 
-      // index 0 = Windows-active session (sorted in worker); only show if has title
       const current = sessions.find(s => s.title) ?? null
       mediaRef.current = current
 
       if (!claudeRef.current) {
         if (!current) {
-          resize('idle')
           setState({ mode: 'idle' })
         } else {
-          resize('media')
           setState({ mode: 'media', session: current })
         }
       }

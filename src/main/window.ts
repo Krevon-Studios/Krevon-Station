@@ -1,28 +1,29 @@
 import { BrowserWindow, screen, nativeImage } from 'electron'
 import { join } from 'path'
 
-// 4px padding each side for clean border-radius anti-aliasing
-export const PILL_PAD  = 4
-export const IDLE_SIZE = { width: 165 + PILL_PAD * 2, height: 44 + PILL_PAD * 2 }
+// Fixed window size — large enough for fully expanded state.
+// The pill itself shrinks/grows via CSS; we never resize the window on hover.
+export const WIN_W  = 520   // wide enough for media expanded
+export const WIN_H  = 200   // pill(110) + shadow(~40) + cursor margin(50)
 
 export function createIslandWindow(): BrowserWindow {
   const { bounds } = screen.getPrimaryDisplay()
 
   const win = new BrowserWindow({
-    width: IDLE_SIZE.width,
-    height: IDLE_SIZE.height,
-    x: Math.round((bounds.width - IDLE_SIZE.width) / 2),
-    y: 6,
+    width:  WIN_W,
+    height: WIN_H,
+    x: Math.round((bounds.width - WIN_W) / 2),
+    y: 0,          // flush with top edge; pill CSS handles the 6px gap visually
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    roundedCorners: false,   // we draw our own pill shape in CSS
+    roundedCorners: false,
     skipTaskbar: true,
     resizable: false,
     maximizable: false,
     minimizable: false,
     focusable: false,
-    hasShadow: false,        // shadow drawn via CSS box-shadow
+    hasShadow: false,
     show: false,
     icon: buildIcon(),
     webPreferences: {
@@ -33,7 +34,7 @@ export function createIslandWindow(): BrowserWindow {
     }
   })
 
-  win.setAlwaysOnTop(true, 'normal')
+  win.setAlwaysOnTop(true, 'screen-saver')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
   win.setIgnoreMouseEvents(true, { forward: true })
 

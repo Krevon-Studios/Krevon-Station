@@ -1,4 +1,4 @@
-import { app, ipcMain, screen } from 'electron'
+import { app, ipcMain } from 'electron'
 import { createIslandWindow } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
@@ -18,26 +18,42 @@ app.whenReady().then(() => {
   startMediaWatcher(win)
   createTray(win)
 
-  // Click-through toggle — renderer sends when hovering pill content
+  // ── Hover detection (main process polling) ─────────────────────────────────
+  // screen.getCursorScreenPoint() is polled every 16 ms in the main process.
+  // This is the most reliable approach for transparent Electron windows:
+  // - Zero IPC round-trip latency (detection happens right here)
+  // - No dependence on {forward:true} forwarding, which can miss events
+  // - setIgnoreMouseEvents is toggled immediately, in the same tick
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { screen } = require('electron') as typeof import('electron')
+
+  let hoverActive = false
+
+  setInterval(() => {
+    const { x, y } = screen.getCursorScreenPoint()
+    const b = win.getBounds()
+
+    const over =
+      x >= b.x && x <= b.x + b.width &&
+      y >= b.y && y <= b.y + b.height
+
+    if (over === hoverActive) return
+
+    hoverActive = over
+    win.setIgnoreMouseEvents(!over, { forward: true })
+    win.webContents.send('island:hover', over)
+  }, 16)
+
+  // Click-through: renderer can still fine-tune (e.g. exact pill hit-test)
   ipcMain.on('set-ignore-mouse', (_event, ignore: boolean) => {
     win.setIgnoreMouseEvents(ignore, { forward: true })
   })
 
-  // Media controls — renderer sends action + target session AUMID
+  // Media controls
   ipcMain.on('control-media', (_event, action: 'play-pause' | 'next' | 'prev', sourceAppId: string) => {
     controlMedia(action, sourceAppId)
   })
 
-  // Dynamic resize: window = pill size, renderer drives it on state change
-  ipcMain.on('set-window-size', (_event, w: number, h: number) => {
-    const { bounds } = screen.getPrimaryDisplay()
-    win.setBounds({
-      x: Math.round((bounds.width - w) / 2),
-      y: 6,
-      width: w,
-      height: h
-    })
-  })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])

@@ -3,6 +3,7 @@ interface IslandAPI {
   onToolActive:       (cb: (data: unknown) => void) => void
   onTaskDone:         (cb: (data: unknown) => void) => void
   onMedia:            (cb: (data: unknown) => void) => void
+  onHover:            (cb: (over: boolean) => void) => void
   controlMedia:       (action: 'play-pause' | 'next' | 'prev', sourceAppId: string) => void
   removeAllListeners: () => void
   setIgnoreMouse:     (ignore: boolean) => void

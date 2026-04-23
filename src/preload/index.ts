@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('island', {
   onMedia: (cb: (data: unknown) => void) =>
     ipcRenderer.on('island:media', (_e, d) => cb(d)),
 
+  // Hover state driven by main-process polling (screen.getCursorScreenPoint)
+  onHover: (cb: (over: boolean) => void) =>
+    ipcRenderer.on('island:hover', (_e, over) => cb(over as boolean)),
+
   controlMedia: (action: 'play-pause' | 'next' | 'prev', sourceAppId: string) =>
     ipcRenderer.send('control-media', action, sourceAppId),
 
@@ -21,8 +25,10 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.removeAllListeners('island:tool-active')
     ipcRenderer.removeAllListeners('island:task-done')
     ipcRenderer.removeAllListeners('island:media')
+    ipcRenderer.removeAllListeners('island:hover')
   },
 
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse', ignore),
-  setWindowSize:  (w: number, h: number) => ipcRenderer.send('set-window-size', w, h)
+  setWindowSize: (_w: number, _h: number) => {}
 })
+
