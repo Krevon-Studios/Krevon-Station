@@ -1,5 +1,5 @@
 import { app, ipcMain, screen } from 'electron'
-import { createIslandWindow, createTaskbarWindow } from './window'
+import { createIslandWindow, createTaskbarWindow, TASKBAR_H } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
@@ -24,7 +24,7 @@ app.whenReady().then(() => {
       x: rect.left,
       y: rect.top,
       width: rect.right - rect.left,
-      height: rect.bottom - rect.top,
+      height: TASKBAR_H,
     })
     if (!taskbarShown && !taskbarWin.isDestroyed()) {
       taskbarShown = true
@@ -65,6 +65,7 @@ app.whenReady().then(() => {
 
   let hoverActive = false
   let interactActive = false
+  let taskbarInteractActive = true
   let hitBox = { w: 160, h: 32 } // default to IDLE_CLOSED
 
   ipcMain.on('set-hit-box', (_event, w: number, h: number) => {
@@ -90,6 +91,16 @@ app.whenReady().then(() => {
       hoverActive = overIsland
       islandWin.webContents.send('island:hover', overIsland)
     }
+
+    // Ensure taskbar only captures clicks in its exact visual area (top 32px)
+    if (!taskbarWin.isDestroyed()) {
+      const tbBounds = taskbarWin.getBounds()
+      const overTaskbar = y >= tbBounds.y && y <= tbBounds.y + TASKBAR_H
+      if (overTaskbar !== taskbarInteractActive) {
+        taskbarInteractActive = overTaskbar
+        taskbarWin.setIgnoreMouseEvents(!overTaskbar, { forward: true })
+      }
+    }
   }, 16)
 
   ipcMain.on('set-ignore-mouse', (_event, ignore: boolean) => {
@@ -106,12 +117,11 @@ app.whenReady().then(() => {
 
   const syncTaskbarWindow = () => {
     const width = appBarRect.right - appBarRect.left
-    const height = appBarRect.bottom - appBarRect.top
     taskbarWin.setBounds({
       x: appBarRect.left,
       y: appBarRect.top,
       width: width > 0 ? width : taskbarWin.getBounds().width,
-      height: height > 0 ? height : taskbarWin.getBounds().height,
+      height: TASKBAR_H,
     })
   }
 
