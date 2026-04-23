@@ -34,13 +34,13 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 
 ## States
 
-| Mode | Trigger | Size | Duration |
-|---|---|---|---|
-| `idle` | Default / no activity | 173×52 | — |
-| `session_start` | Claude Code session begins | 223×62 | 2.5s then idle/media |
-| `tool_active` | Claude Code tool call | 283×70 | Until Stop hook |
-| `task_done` | Claude Code task completes | 318×70 | 5s then idle/media |
-| `media` | SMTC media session active | 368×74 | While session exists |
+| Mode | Trigger | Size (Closed → Hovered) |
+|---|---|---|
+| `idle` | Default / no activity | 160×32 → 320×72 |
+| `session_start` | Claude Code session begins | 160×32 → 320×80 |
+| `tool_active` | Claude Code tool call | 160×32 → 340×80 |
+| `task_done` | Claude Code task completes | 160×32 → 360×80 |
+| `media` | SMTC media session active | 160×32 → 420×110 |
 
 Claude Code states always override media state. When Claude finishes, media resumes if something is playing.
 
@@ -184,9 +184,10 @@ Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-st
 | `island:tool-active` | Main → Renderer | `{ tool_name }` |
 | `island:task-done` | Main → Renderer | `{ total_cost_usd, num_turns, duration_ms }` |
 | `island:media` | Main → Renderer | `{ sessions: MediaSessionData[] }` |
+| `island:hover` | Main → Renderer | `boolean` (hover state from main process) |
 | `set-ignore-mouse` | Renderer → Main | `boolean` |
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |
-| `set-window-size` | Renderer → Main | `(w, h)` |
+| `set-hit-box` | Renderer → Main | `(w, h)` |
 
 ---
 
@@ -235,11 +236,13 @@ Unknown tools are title-cased from their snake_case name.
 
 - **Transparent** — `transparent: true`, `backgroundColor: '#00000000'`, no frame
 - **No shadow** from OS — shadow drawn via CSS `inset` box-shadow only (prevents dark glow on transparent bg)
-- **Position** — centered horizontally, `y: 6` from top edge of primary display
-- **Pill shape** — `border-radius: 999px` on inner div; window has 4px padding on each side for clean AA
-- **Always on top** — `setAlwaysOnTop(true, 'normal')` hides behind fullscreen apps
-- **Non-focusable** — `focusable: false`; keyboard focus never stolen
-- **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled while cursor is over pill
+- **Window bounds** — `520x200` fixed window size to allow pill scaling and shadows without window resize jank.
+- **Dynamic Hit Box** — The renderer sends its true intended dimensions (`set-hit-box`) to the main process. The main process polls `screen.getCursorScreenPoint()` at 16ms to check against this exact hit box, giving zero-latency, dead-reliable hover detection without an invisible boundary.
+- **Position** — centered horizontally, flush with the top edge of primary display (`y: 0`).
+- **Pill shape** — Top corners flush (`0px`), bottom corners rounded (`14px` idle, `22px` expanded).
+- **Always on top** — `setAlwaysOnTop(true, 'screen-saver')` hides behind fullscreen apps.
+- **Non-focusable** — `focusable: false`; keyboard focus never stolen.
+- **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; toggled dynamically by the main process based on hover hit-test.
 
 ---
 
