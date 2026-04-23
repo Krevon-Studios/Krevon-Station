@@ -1,5 +1,5 @@
 import { spawn, execSync, ChildProcessWithoutNullStreams } from 'child_process'
-import { BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 
 let desktopCount = 1
@@ -41,13 +41,12 @@ function readInitialState() {
 export function startDesktopWatcher(win: BrowserWindow) {
   mainWin = win
 
-  const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_RENDERER_URL
-  const monitorScriptPath = isDev
-    ? join(__dirname, '../../src/main/desktop-monitor.ps1')
-    : join(process.resourcesPath, 'desktop-monitor.ps1')
-  switchScriptPath = isDev
-    ? join(__dirname, '../../src/main/switch-desktop.ps1')
-    : join(process.resourcesPath, 'switch-desktop.ps1')
+  const monitorScriptPath = app.isPackaged
+    ? join(process.resourcesPath, 'desktop-monitor.ps1')
+    : join(__dirname, '../../src/main/desktop-monitor.ps1')
+  switchScriptPath = app.isPackaged
+    ? join(process.resourcesPath, 'switch-desktop.ps1')
+    : join(__dirname, '../../src/main/switch-desktop.ps1')
 
   // Read state synchronously before anything else
   readInitialState()
