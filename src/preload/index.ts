@@ -50,9 +50,18 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.removeAllListeners('island:media')
     ipcRenderer.removeAllListeners('island:virtual-desktops')
     ipcRenderer.removeAllListeners('island:hover')
+    ipcRenderer.removeAllListeners('system-stats')
   },
 
   switchVirtualDesktop: (targetIndex: number) => ipcRenderer.send('switch-virtual-desktop', targetIndex),
+
+  getSystemStats: () => ipcRenderer.invoke('get-system-stats'),
+
+  onSystemStats: (cb: (data: unknown) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d)
+    ipcRenderer.on('system-stats', fn)
+    return () => ipcRenderer.removeListener('system-stats', fn)
+  },
 
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse', ignore),
   setWindowSize: (_w: number, _h: number) => {},

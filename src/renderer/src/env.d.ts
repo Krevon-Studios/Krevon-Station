@@ -1,3 +1,23 @@
+type NetworkType = 'wifi' | 'ethernet' | 'none'
+
+interface NetworkState {
+  type:        NetworkType
+  signal:      number | null
+  hasInternet: boolean
+  ssid:        string | null
+  vpnActive:   boolean
+}
+
+interface AudioState {
+  volume: number
+  muted:  boolean
+}
+
+interface SystemStats {
+  network: NetworkState
+  audio:   AudioState
+}
+
 interface IslandAPI {
   onSessionStart:     (cb: (data: unknown) => void) => () => void
   onToolActive:       (cb: (data: unknown) => void) => () => void
@@ -12,6 +32,8 @@ interface IslandAPI {
   setIgnoreMouse:     (ignore: boolean) => void
   setWindowSize:      (w: number, h: number) => void
   setHitBox:          (w: number, h: number) => void
+  getSystemStats:     () => Promise<SystemStats>
+  onSystemStats:      (cb: (data: SystemStats) => void) => () => void
 }
 
 declare interface Window {

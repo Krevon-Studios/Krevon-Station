@@ -13,6 +13,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
 - **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
+- **Live system tray icons** — WiFi (4 signal levels), Ethernet, no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all event-driven with zero polling
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
 - **Dynamic resize** — pill expands/contracts smoothly per state
 - **Always on top** — hides behind fullscreen apps automatically
@@ -27,10 +28,11 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 | App shell | Electron 31 |
 | Build | electron-vite + Vite 5 |
 | UI | React 18 + Tailwind CSS + Framer Motion |
-| Icons | Lucide React + Custom SVGs |
+| Icons | Lucide React |
 | Package manager | Bun |
 | Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
 | Hook server | Express on `127.0.0.1:7823` |
+| System stats | Python 3 + `pycaw` + `psutil` (event-driven, zero polling) |
 
 ---
 
@@ -61,6 +63,9 @@ src/
 │   ├── desktop-watcher.ts    # Virtual desktop state — registry monitor + switch IPC
 │   ├── desktop-monitor.ps1   # PowerShell — blocks on RegNotifyChangeKeyValue, streams changes
 │   ├── switch-desktop.ps1    # PowerShell — persistent stdin loop, calls native helper, falls back to hotkeys
+│   ├── system-stats.ts       # Spawns Python monitors, broadcasts system-stats IPC
+│   ├── audio-monitor.py      # Python — IAudioEndpointVolumeCallback COM callback (zero polling)
+│   ├── network-monitor.py    # Python — NotifyAddrChange blocking call + netsh/psutil (zero polling)
 │   ├── vendor/
 │   │   ├── VirtualDesktopHelper.exe
 │   │   ├── VirtualDesktopHelper.source.cs
@@ -70,10 +75,10 @@ src/
 │   └── index.ts              # Context-isolated window.island IPC bridge
 └── renderer/src/
     ├── types.ts              # IslandState, MediaSessionData
-    ├── env.d.ts              # window.island API types
+    ├── env.d.ts              # window.island API types (incl. SystemStats)
     ├── components/
     │   ├── Island.tsx        # All state UIs + media controls
-    │   └── Taskbar.tsx       # Full-width top bar with virtual desktop dots
+    │   └── Taskbar.tsx       # Full-width top bar — desktop dots + live system icons
     └── store/
         └── useIslandStore.ts # State machine + window resize logic
 ```
@@ -87,6 +92,11 @@ src/
 - Windows 10/11
 - [Bun](https://bun.sh) — `winget install Oven-sh.Bun`
 - [Node.js](https://nodejs.org) 18+ (for Electron toolchain)
+- [Python 3](https://python.org) 3.8+ with `pip` — required for system tray icon monitoring
+
+  ```bash
+  pip install pycaw psutil
+  ```
 
 ### Install & Run
 
@@ -250,7 +260,9 @@ App start
 | `island:media` | Main → Renderer | `{ sessions: MediaSessionData[] }` |
 | `island:hover` | Main → Renderer | `boolean` |
 | `island:virtual-desktops` | Main → Renderer | `{ count: number, activeIndex: number }` |
+| `system-stats` | Main → Renderer | `{ network: NetworkState, audio: AudioState }` |
 | `get-virtual-desktops` | Renderer → Main (invoke) | — returns `{ count, activeIndex }` |
+| `get-system-stats` | Renderer → Main (invoke) | — returns current `SystemStats` snapshot |
 | `switch-virtual-desktop` | Renderer → Main | `targetIndex: number` |
 | `set-ignore-mouse` | Renderer → Main | `boolean` |
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |
@@ -340,6 +352,15 @@ Unknown tools are title-cased from their snake_case name.
 - Requires PowerShell execution policy to allow unsigned scripts (`-ExecutionPolicy Bypass` is passed automatically)
 - The switcher now attempts a maintained native helper first for instant non-sequential moves
 - If the helper cannot access the virtual desktop API on a given machine, the app falls back to `Win+Ctrl+Arrow`, which still animates through intermediate desktops
+
+**WiFi/audio icons not appearing or stuck**
+- Ensure Python 3 is installed and on PATH: `python --version` or `py --version`
+- Ensure `pycaw` and `psutil` are installed: `pip install pycaw psutil`
+- Check the Electron console for `[audio:err]` or `[network:err]` lines
+
+**VPN key icon not showing**
+- The VPN icon appears when any active network adapter name contains a known VPN keyword (TAP, TUN, WireGuard, NordVPN, ExpressVPN, ProtonVPN, Mullvad, OpenVPN, Cisco AnyConnect, GlobalProtect, etc.)
+- If your VPN client uses an unlisted adapter name, open `src/main/network-monitor.py` and add the keyword to `_VPN_KEYWORDS`
 
 ## Virtual Desktop Compatibility
 

@@ -5,6 +5,7 @@ import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
 import { createTray } from './tray'
 import { attachAppBar } from './appbar'
+import { startSystemStatsWatcher, getCachedSystemStats } from './system-stats'
 
 app.setName('Dynamic Island')
 
@@ -68,7 +69,10 @@ app.whenReady().then(() => {
   startHookServer(islandWin)
   startMediaWatcher(islandWin)
   startDesktopWatcher(taskbarWin)
+  startSystemStatsWatcher([taskbarWin])
   createTray([taskbarWin, islandWin])
+
+  ipcMain.handle('get-system-stats', () => getCachedSystemStats())
 
   // Snap the island window to y=0 (full display top, inside the reserved bar).
   // If Windows overrides the position during work-area settling, retry with a
