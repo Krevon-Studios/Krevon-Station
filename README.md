@@ -1,6 +1,6 @@
 # Dynamic Island for Windows
 
-A macOS-style Dynamic Island overlay for Windows, built with Electron + React. Shows real-time Claude Code activity (tool calls, session start, task completion) and Windows media controls — all in a floating pill at the top of your screen.
+A macOS-style Dynamic Island overlay for Windows, built with Electron + React. Shows real-time Claude Code activity (tool calls, session start, task completion) and Windows media controls — all in a floating pill at the top of your screen, with a full-width taskbar showing virtual desktop pagination.
 
 ![idle](https://img.shields.io/badge/state-idle-555) ![tool](https://img.shields.io/badge/state-tool__active-7C6AFF) ![done](https://img.shields.io/badge/state-task__done-34D399) ![media](https://img.shields.io/badge/state-media-1DB954)
 
@@ -12,6 +12,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
+- **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to switch desktops instantly
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
 - **Dynamic resize** — pill expands/contracts smoothly per state
 - **Always on top** — hides behind fullscreen apps automatically
@@ -52,21 +53,25 @@ Claude Code states always override media state. When Claude finishes, media resu
 ```
 src/
 ├── main/
-│   ├── index.ts          # App entry, IPC handlers
-│   ├── window.ts         # BrowserWindow config (transparent, always-on-top)
-│   ├── hook-server.ts    # Express server — receives Claude Code hooks
-│   ├── media-watcher.ts  # Worker manager + PowerShell media control
-│   ├── media-worker.ts   # Worker thread — SMTC session monitoring
-│   └── tray.ts           # System tray menu
+│   ├── index.ts              # App entry, IPC handlers
+│   ├── window.ts             # BrowserWindow config (full-width, transparent, always-on-top)
+│   ├── hook-server.ts        # Express server — receives Claude Code hooks
+│   ├── media-watcher.ts      # Worker manager + PowerShell media control
+│   ├── media-worker.ts       # Worker thread — SMTC session monitoring
+│   ├── desktop-watcher.ts    # Virtual desktop state — registry monitor + switch IPC
+│   ├── desktop-monitor.ps1   # PowerShell — blocks on RegNotifyChangeKeyValue, streams changes
+│   ├── switch-desktop.ps1    # PowerShell — persistent stdin loop, sends Win+Ctrl+Arrow keys
+│   └── tray.ts               # System tray menu
 ├── preload/
-│   └── index.ts          # Context-isolated window.island IPC bridge
+│   └── index.ts              # Context-isolated window.island IPC bridge
 └── renderer/src/
-    ├── types.ts           # IslandState, MediaSessionData
-    ├── env.d.ts           # window.island API types
+    ├── types.ts              # IslandState, MediaSessionData
+    ├── env.d.ts              # window.island API types
     ├── components/
-    │   └── Island.tsx     # All state UIs + media controls
+    │   ├── Island.tsx        # All state UIs + media controls
+    │   └── Taskbar.tsx       # Full-width top bar with virtual desktop dots
     └── store/
-        └── useIslandStore.ts  # State machine + window resize logic
+        └── useIslandStore.ts # State machine + window resize logic
 ```
 
 ---
@@ -177,6 +182,30 @@ Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-st
 
 **Multi-Source Tracking:** When multiple media sources are active (e.g. Spotify and Chrome), users can cycle through them using interactive pagination dots in the pill. The app tracks the active session by its `sourceAppId` rather than index, preventing UI jumps when Windows dynamically re-orders the underlying session array based on recent playback. Auto-switching prioritizes actively playing sources automatically unless the user manually overrides it.
 
+### Virtual Desktop Pagination
+
+```
+App start
+    │
+    ├─ readInitialState() ── reg query ──▶ parse VirtualDesktopIDs + CurrentVirtualDesktop
+    │                                      (synchronous, before renderer loads)
+    │
+    ├─ desktop-monitor.ps1 ── RegNotifyChangeKeyValue ──▶ blocks until registry changes
+    │      (persistent)            │
+    │                              └─ stdout line "idsHex|currentHex" ──▶ island:virtual-desktops
+    │
+    └─ switch-desktop.ps1 ── stdin loop ──▶ reads "targetIndex|fromIndex"
+           (persistent)            │
+                                   └─ keybd_event(Win+Ctrl+Arrow × N steps)
+
+Renderer mounts
+    │
+    ├─ invoke('get-virtual-desktops') ──▶ returns current count + activeIndex immediately
+    └─ on('island:virtual-desktops')  ──▶ listens for subsequent changes
+```
+
+Switching sends an optimistic IPC push to the renderer immediately for instant visual feedback, then the registry monitor confirms the actual desktop change.
+
 ---
 
 ## IPC Channels
@@ -187,7 +216,10 @@ Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-st
 | `island:tool-active` | Main → Renderer | `{ tool_name }` |
 | `island:task-done` | Main → Renderer | `{ total_cost_usd, num_turns, duration_ms }` |
 | `island:media` | Main → Renderer | `{ sessions: MediaSessionData[] }` |
-| `island:hover` | Main → Renderer | `boolean` (hover state from main process) |
+| `island:hover` | Main → Renderer | `boolean` |
+| `island:virtual-desktops` | Main → Renderer | `{ count: number, activeIndex: number }` |
+| `get-virtual-desktops` | Renderer → Main (invoke) | — returns `{ count, activeIndex }` |
+| `switch-virtual-desktop` | Renderer → Main | `targetIndex: number` |
 | `set-ignore-mouse` | Renderer → Main | `boolean` |
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |
 | `set-hit-box` | Renderer → Main | `(w, h)` |
@@ -239,14 +271,15 @@ Unknown tools are title-cased from their snake_case name.
 ## Window Behavior
 
 - **Transparent** — `transparent: true`, `backgroundColor: '#00000000'`, no frame
-- **No shadow** from OS — shadow drawn via CSS `inset` box-shadow only (prevents dark glow on transparent bg)
-- **Window bounds** — `520x200` fixed window size to allow pill scaling and shadows without window resize jank.
-- **Dynamic Hit Box** — The renderer sends its true intended dimensions (`set-hit-box`) to the main process. The main process polls `screen.getCursorScreenPoint()` at 16ms to check against this exact hit box, giving zero-latency, dead-reliable hover detection without an invisible boundary.
-- **Position** — centered horizontally, flush with the top edge of primary display (`y: 0`).
-- **Pill shape** — Top corners flush (`0px`), bottom corners rounded (`14px` idle, `22px` expanded).
-- **Always on top** — `setAlwaysOnTop(true, 'screen-saver')` hides behind fullscreen apps.
-- **Non-focusable** — `focusable: false`; keyboard focus never stolen.
-- **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; toggled dynamically by the main process based on hover hit-test.
+- **Full-width** — window spans the full primary display width to accommodate the taskbar
+- **Taskbar** — 32px black bar at top with virtual desktop pagination dots (left) and system tray icons (right); casts a full-width shadow beneath it
+- **Island shadow** — pill has no shadow when closed (merges visually with taskbar); shadow fades in via Framer Motion when pill expands below the 32px taskbar zone, preventing overlap
+- **Dynamic Hit Box** — renderer sends true intended dimensions (`set-hit-box`) to main process. Main polls `screen.getCursorScreenPoint()` at 16ms against this hit box. Taskbar area always interactive regardless of island state.
+- **Position** — flush with top-left of primary display (`x: 0, y: 0`)
+- **Pill shape** — top corners flush (`0px`), bottom corners rounded (`14px` idle, `22px` expanded)
+- **Always on top** — `setAlwaysOnTop(true, 'screen-saver')` hides behind fullscreen apps
+- **Non-focusable** — `focusable: false`; keyboard focus never stolen
+- **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled over island hover zone and taskbar
 
 ---
 
@@ -269,6 +302,10 @@ Unknown tools are title-cased from their snake_case name.
 **Media controls wrong session**
 - WinRT control targets session by `SourceAppUserModelId`; select correct source using the pagination dots in the pill
 - Controls take ~300–800ms (PowerShell startup + WinRT init)
+
+**Virtual desktop pagination not updating**
+- Requires PowerShell execution policy to allow unsigned scripts (`-ExecutionPolicy Bypass` is passed automatically)
+- Desktop switch uses `Win+Ctrl+Arrow` keystrokes; switching N desktops takes N animation steps
 
 ---
 
