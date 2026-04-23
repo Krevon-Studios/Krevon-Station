@@ -52,9 +52,9 @@ export function createIslandWindow(): BrowserWindow {
   const { bounds } = buildBaseOptions()
 
   const win = new BrowserWindow({
-    width: bounds.width,
+    width: WIN_W,
     height: WIN_H,
-    x: bounds.x,
+    x: bounds.x + Math.floor((bounds.width - WIN_W) / 2),
     y: bounds.y,   // flush with top edge; pill CSS handles the 6px gap visually
     frame: false,
     transparent: true,

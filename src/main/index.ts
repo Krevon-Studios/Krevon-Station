@@ -53,9 +53,9 @@ app.whenReady().then(() => {
     if (islandWin.isDestroyed()) return
     const { bounds } = screen.getPrimaryDisplay()
     islandWin.setBounds({
-      x: bounds.x,
+      x: bounds.x + Math.floor((bounds.width - islandWin.getBounds().width) / 2),
       y: bounds.y,
-      width: bounds.width,
+      width: islandWin.getBounds().width,
       height: islandWin.getBounds().height,
     })
     if (islandWin.getBounds().y !== bounds.y && retriesLeft > 0) {
@@ -118,9 +118,9 @@ app.whenReady().then(() => {
   const syncIslandWindow = () => {
     const { bounds } = screen.getPrimaryDisplay()
     islandWin.setBounds({
-      x: bounds.x,
+      x: bounds.x + Math.floor((bounds.width - islandWin.getBounds().width) / 2),
       y: bounds.y,
-      width: bounds.width,
+      width: islandWin.getBounds().width,
       height: islandWin.getBounds().height,
     })
   }
