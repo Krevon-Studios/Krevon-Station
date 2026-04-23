@@ -98,6 +98,7 @@ namespace DynamicIsland
         private const int ABM_ACTIVATE = 0x00000006;
         private const int ABM_WINDOWPOSCHANGED = 0x00000009;
         private const int ABN_POSCHANGED = 0x00000001;
+        private const int ABN_FULLSCREENAPP = 0x00000002;
 
         private readonly int _callbackMessage = WM_USER + 1;
         private readonly int _height;
@@ -163,9 +164,24 @@ namespace DynamicIsland
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == _callbackMessage && m.WParam.ToInt32() == ABN_POSCHANGED)
+            if (m.Msg == _callbackMessage)
             {
-                ApplyBarPosition();
+                int notification = m.WParam.ToInt32();
+                if (notification == ABN_POSCHANGED)
+                {
+                    ApplyBarPosition();
+                }
+                else if (notification == ABN_FULLSCREENAPP)
+                {
+                    // lParam is non-zero when a window entered fullscreen,
+                    // zero when it exited. We also filter out system overlays
+                    // (Task View, Alt+Tab, Start, desktop) that Windows treats
+                    // as "fullscreen" but where the navbar should stay visible.
+                    bool entering = m.LParam.ToInt64() != 0;
+                    bool suppress = entering && IsSystemOverlay();
+                    Console.WriteLine("FULLSCREEN|{0}", (entering && !suppress) ? 1 : 0);
+                    Console.Out.Flush();
+                }
             }
             else if (m.Msg == WM_ACTIVATE)
             {
@@ -248,6 +264,41 @@ namespace DynamicIsland
             };
         }
 
+        /// <summary>
+        /// Returns true if the current foreground window is a Windows system
+        /// overlay that should NOT cause the navbar to hide.
+        /// </summary>
+        private static bool IsSystemOverlay()
+        {
+            IntPtr hwnd = NativeMethods.GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return true; // no foreground — play it safe
+
+            var sb = new System.Text.StringBuilder(256);
+            NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
+            string cls = sb.ToString();
+
+            // Class names known to trigger ABN_FULLSCREENAPP even though they
+            // are system UI that the user still wants the navbar visible for.
+            string[] systemClasses =
+            {
+                "MultitaskingViewFrame",       // Win+Tab Task View
+                "TaskSwitcherWnd",             // Alt+Tab
+                "TaskSwitcherOverlayWnd",      // Alt+Tab overlay
+                "Windows.UI.Core.CoreWindow",  // Windows 10/11 system UI
+                "XamlExplorerHostIslandWindow",// Windows 11 Start / widgets
+                "Shell_TrayWnd",               // Shell taskbar
+                "WorkerW",                     // Desktop worker window
+                "Progman",                     // Program Manager (desktop)
+            };
+
+            foreach (string c in systemClasses)
+            {
+                if (string.Equals(cls, c, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
         [DllImport("shell32.dll")]
         private static extern uint SHAppBarMessage(uint dwMessage, ref APPBARDATA pData);
 
@@ -297,5 +348,12 @@ namespace DynamicIsland
         public static extern int GetDpiForMonitor(
             IntPtr hMonitor, uint dpiType,
             out uint dpiX, out uint dpiY);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        public static extern int GetClassName(
+            IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
     }
 }

@@ -18,24 +18,48 @@ app.whenReady().then(() => {
   const islandWin = createIslandWindow()
   let appBarRect = { left: 0, top: 0, right: 0, bottom: 32 }
   let taskbarShown = false
-  const detachAppBar = attachAppBar(taskbarWin, (rect) => {
-    appBarRect = rect
-    taskbarWin.setBounds({
-      x: rect.left,
-      y: rect.top,
-      width: rect.right - rect.left,
-      height: TASKBAR_H,
-    })
-    if (!taskbarShown && !taskbarWin.isDestroyed()) {
-      taskbarShown = true
-      taskbarWin.show()
+  const detachAppBar = attachAppBar(
+    taskbarWin,
+    (rect) => {
+      appBarRect = rect
+      taskbarWin.setBounds({
+        x: rect.left,
+        y: rect.top,
+        width: rect.right - rect.left,
+        height: TASKBAR_H,
+      })
+      if (!taskbarShown && !taskbarWin.isDestroyed()) {
+        taskbarShown = true
+        taskbarWin.show()
+      }
+      // Re-pin the island every time the app bar reports its position.
+      // Windows can nudge it down to the work area start during work-area
+      // settling; the retry loop catches the cases where the first attempt
+      // is overridden before it sticks.
+      pinIslandToTop()
+    },
+    (isFullscreen) => {
+      if (taskbarWin.isDestroyed() || islandWin.isDestroyed()) return
+      if (isFullscreen) {
+        // Make windows invisible + fully non-interactive without calling hide().
+        // hide()/showInactive() corrupts Electron's setIgnoreMouseEvents state
+        // on Windows; setOpacity keeps the windows "alive" so nothing resets.
+        taskbarWin.setOpacity(0)
+        taskbarWin.setIgnoreMouseEvents(true, { forward: true })
+        islandWin.setOpacity(0)
+        islandWin.setIgnoreMouseEvents(true, { forward: true })
+      } else {
+        // Restore visibility — window state was never disrupted so the interval
+        // will immediately re-evaluate the correct setIgnoreMouseEvents value.
+        taskbarWin.setOpacity(1)
+        islandWin.setOpacity(1)
+        // -1 sentinel: never === true/false, forces interval to fire on next tick.
+        interactActive = -1 as any
+        hoverActive = -1 as any
+        taskbarInteractActive = -1 as any
+      }
     }
-    // Re-pin the island every time the app bar reports its position.
-    // Windows can nudge it down to the work area start during work-area
-    // settling; the retry loop catches the cases where the first attempt
-    // is overridden before it sticks.
-    pinIslandToTop()
-  })
+  )
 
   // Pin the island the moment it becomes visible — the work area may
   // already have changed by the time ready-to-show fires.

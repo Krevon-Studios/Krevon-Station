@@ -103,7 +103,8 @@ function ensureHelperBuilt(): string {
 
 export function attachAppBar(
   _win: BrowserWindow,
-  onRect?: (rect: Rect) => void
+  onRect?: (rect: Rect) => void,
+  onFullscreen?: (isFullscreen: boolean) => void
 ): () => void {
   restoreLegacyWorkAreaIfNeeded()
 
@@ -123,17 +124,25 @@ export function attachAppBar(
 
     proc.stdout.on('data', (data: Buffer) => {
       for (const line of data.toString().trim().split(/\r?\n/)) {
-        const match = line.match(/^(-?\d+)\|(-?\d+)\|(-?\d+)\|(-?\d+)$/)
-        if (!match) continue
+        // FULLSCREEN notification from the C# helper
+        const fsMatch = line.match(/^FULLSCREEN\|(\d)$/)
+        if (fsMatch) {
+          onFullscreen?.(fsMatch[1] === '1')
+          continue
+        }
+
+        // Rect notification: left|top|right|bottom (physical pixels)
+        const rectMatch = line.match(/^(-?\d+)\|(-?\d+)\|(-?\d+)\|(-?\d+)$/)
+        if (!rectMatch) continue
         // The helper is now PerMonitorV2 DPI-aware, so the rect it emits is in
         // physical pixels. Electron's setBounds() takes DIPs, so we divide by
         // the primary display's scaleFactor to convert.
         const sf = screen.getPrimaryDisplay().scaleFactor
         onRect?.({
-          left:   Math.round(Number(match[1]) / sf),
-          top:    Math.round(Number(match[2]) / sf),
-          right:  Math.round(Number(match[3]) / sf),
-          bottom: Math.round(Number(match[4]) / sf),
+          left:   Math.round(Number(rectMatch[1]) / sf),
+          top:    Math.round(Number(rectMatch[2]) / sf),
+          right:  Math.round(Number(rectMatch[3]) / sf),
+          bottom: Math.round(Number(rectMatch[4]) / sf),
         })
       }
     })
