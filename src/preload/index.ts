@@ -25,6 +25,15 @@ contextBridge.exposeInMainWorld('island', {
     return () => ipcRenderer.removeListener('island:media', fn)
   },
 
+  getVirtualDesktops: (): Promise<{ count: number; activeIndex: number }> =>
+    ipcRenderer.invoke('get-virtual-desktops'),
+
+  onVirtualDesktops: (cb: (data: { count: number, activeIndex: number }) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d as { count: number, activeIndex: number })
+    ipcRenderer.on('island:virtual-desktops', fn)
+    return () => ipcRenderer.removeListener('island:virtual-desktops', fn)
+  },
+
   onHover: (cb: (over: boolean) => void) => {
     const fn = (_e: any, over: unknown) => cb(over as boolean)
     ipcRenderer.on('island:hover', fn)
@@ -39,8 +48,11 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.removeAllListeners('island:tool-active')
     ipcRenderer.removeAllListeners('island:task-done')
     ipcRenderer.removeAllListeners('island:media')
+    ipcRenderer.removeAllListeners('island:virtual-desktops')
     ipcRenderer.removeAllListeners('island:hover')
   },
+
+  switchVirtualDesktop: (targetIndex: number) => ipcRenderer.send('switch-virtual-desktop', targetIndex),
 
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse', ignore),
   setWindowSize: (_w: number, _h: number) => {},

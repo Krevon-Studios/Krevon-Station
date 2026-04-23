@@ -472,22 +472,22 @@ export function Island() {
 
   return (
     <div
-      className="w-full flex justify-center select-none"
+      className="w-full flex justify-center select-none pointer-events-none"
       style={{ background: 'transparent' }}
     >
       <motion.div
+        className="pointer-events-auto"
         animate={{
           width: target.w,
           height: target.h,
           borderRadius: isExpanded ? '0px 0px 22px 22px' : '0px 0px 14px 14px',
+          boxShadow: isExpanded
+            ? '0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.40)'
+            : '0 8px 32px rgba(0,0,0,0.00), 0 2px 8px rgba(0,0,0,0.00)',
         }}
         transition={SPRING_PILL}
         style={{
           background: '#000000',
-          boxShadow: [
-            '0 8px 32px rgba(0,0,0,0.55)',
-            '0 2px 8px rgba(0,0,0,0.4)',
-          ].join(', '),
           overflow: 'hidden',
           position: 'relative',
           cursor: 'default',
