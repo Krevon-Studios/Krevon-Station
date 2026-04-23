@@ -489,9 +489,7 @@ export function Island() {
           width: target.w,
           height: target.h,
           borderRadius: isExpanded ? '0px 0px 22px 22px' : '0px 0px 14px 14px',
-          boxShadow: isExpanded
-            ? '0 8px 32px rgba(0,0,0,0.55), 0 2px 8px rgba(0,0,0,0.40)'
-            : '0 8px 32px rgba(0,0,0,0.00), 0 2px 8px rgba(0,0,0,0.00)',
+          boxShadow: 'none',
         }}
         transition={SPRING_PILL}
         style={{
