@@ -211,6 +211,7 @@ Recognized apps (from SMTC `SourceAppUserModelId`):
 | YT Music | `youtubemusic` |
 | TIDAL | `tidal` |
 | foobar2000 | `foobar2000` |
+| WhatsApp | `whatsapp` |
 
 Unknown apps fall back to the last segment of the AUMID.
 

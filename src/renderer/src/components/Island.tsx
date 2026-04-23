@@ -37,6 +37,7 @@ const EXPANDED: Record<IslandState['mode'], { w: number; h: number }> = {
 function sourceLabel(raw: string): string {
   const s = raw.toLowerCase().replace(/\.exe$/i, '')
   const map: Record<string, string> = {
+    'whatsapp': 'WhatsApp',
     'spotifyab': 'Spotify',
     'spotify': 'Spotify',
     'chrome': 'Chrome',
@@ -215,8 +216,7 @@ function MediaExpandedContent({
                 style={{ imageRendering: 'auto' }}
               />
             ) : (
-              <div className={`w-full h-full rounded-[12px] flex items-center justify-center
-                ${isPlaying ? 'bg-[#34D399]/12 border border-[#34D399]/20' : 'bg-white/8 border border-white/10'}`}>
+              <div className="w-full h-full rounded-[12px] flex items-center justify-center bg-white/8 border border-white/10">
                 <Music2 size={22} color="rgba(255,255,255,0.3)" strokeWidth={1.5} />
               </div>
             )}
