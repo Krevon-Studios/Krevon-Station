@@ -12,7 +12,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
-- **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to switch desktops instantly
+- **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
 - **Dynamic resize** — pill expands/contracts smoothly per state
 - **Always on top** — hides behind fullscreen apps automatically
@@ -60,7 +60,11 @@ src/
 │   ├── media-worker.ts       # Worker thread — SMTC session monitoring
 │   ├── desktop-watcher.ts    # Virtual desktop state — registry monitor + switch IPC
 │   ├── desktop-monitor.ps1   # PowerShell — blocks on RegNotifyChangeKeyValue, streams changes
-│   ├── switch-desktop.ps1    # PowerShell — persistent stdin loop, sends Win+Ctrl+Arrow keys
+│   ├── switch-desktop.ps1    # PowerShell — persistent stdin loop, calls native helper, falls back to hotkeys
+│   ├── vendor/
+│   │   ├── VirtualDesktopHelper.exe
+│   │   ├── VirtualDesktopHelper.source.cs
+│   │   └── VirtualDesktopHelper.LICENSE.txt
 │   └── tray.ts               # System tray menu
 ├── preload/
 │   └── index.ts              # Context-isolated window.island IPC bridge
@@ -196,7 +200,8 @@ App start
     │
     └─ switch-desktop.ps1 ── stdin loop ──▶ reads "targetIndex|fromIndex"
            (persistent)            │
-                                   └─ keybd_event(Win+Ctrl+Arrow × N steps)
+                                   ├─ VirtualDesktopHelper.exe /Animation:Off /Switch:<n>
+                                   └─ fallback: keybd_event(Win+Ctrl+Arrow × N steps)
 
 Renderer mounts
     │
@@ -305,7 +310,26 @@ Unknown tools are title-cased from their snake_case name.
 
 **Virtual desktop pagination not updating**
 - Requires PowerShell execution policy to allow unsigned scripts (`-ExecutionPolicy Bypass` is passed automatically)
-- Desktop switch uses `Win+Ctrl+Arrow` keystrokes; switching N desktops takes N animation steps
+- The switcher now attempts a maintained native helper first for instant non-sequential moves
+- If the helper cannot access the virtual desktop API on a given machine, the app falls back to `Win+Ctrl+Arrow`, which still animates through intermediate desktops
+
+## Virtual Desktop Compatibility
+
+Direct desktop switching is implemented through a bundled native helper that targets the newer Windows virtual desktop API shape used by many Windows 11 24H2 builds. This gives the app true non-sequential jumps such as desktop 1 → desktop 3 without visibly stepping through desktop 2.
+
+Windows does not provide a stable public API for switching the current virtual desktop directly, so this feature depends on undocumented system interfaces that can change between Windows releases and cumulative updates. Because of that, compatibility is best-effort rather than guaranteed across every machine.
+
+What to expect:
+
+- On compatible systems, clicking a pagination dot jumps directly to the selected desktop.
+- On unsupported or mismatched systems, the app falls back to standard `Win+Ctrl+Arrow` switching.
+- The fallback keeps desktop switching functional, but Windows will animate through intermediate desktops.
+
+For open source contributors and users, the safest expectation is:
+
+- Direct switching is supported on many Windows 11 24H2 systems.
+- Other Windows versions or builds may still work, but should be treated as unverified unless tested.
+- The project is designed to degrade gracefully instead of breaking when the native helper is unavailable.
 
 ---
 

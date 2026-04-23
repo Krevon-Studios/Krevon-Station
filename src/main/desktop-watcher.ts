@@ -6,6 +6,7 @@ let desktopCount = 1
 let activeDesktopIndex = 0
 let switchPs: ChildProcessWithoutNullStreams | null = null
 let mainWin: BrowserWindow | null = null
+let switchScriptPath: string | null = null
 
 function readInitialState() {
   try {
@@ -44,7 +45,7 @@ export function startDesktopWatcher(win: BrowserWindow) {
   const monitorScriptPath = isDev
     ? join(__dirname, '../../src/main/desktop-monitor.ps1')
     : join(process.resourcesPath, 'desktop-monitor.ps1')
-  const switchScriptPath = isDev
+  switchScriptPath = isDev
     ? join(__dirname, '../../src/main/switch-desktop.ps1')
     : join(process.resourcesPath, 'switch-desktop.ps1')
 
@@ -57,9 +58,7 @@ export function startDesktopWatcher(win: BrowserWindow) {
     activeIndex: activeDesktopIndex
   }))
 
-  // Start persistent switch process (stdin reader loop)
-  switchPs = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', switchScriptPath])
-  switchPs.stderr.on('data', () => { /* suppress */ })
+  startSwitchProcess()
 
   // Registry change monitor
   const ps = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', monitorScriptPath])
@@ -103,7 +102,36 @@ export function switchVirtualDesktop(targetIndex: number) {
   activeDesktopIndex = targetIndex
   mainWin?.webContents.send('island:virtual-desktops', { count: desktopCount, activeIndex: targetIndex })
 
-  if (switchPs?.stdin) {
+  if (!switchPs || switchPs.killed || switchPs.exitCode !== null) {
+    startSwitchProcess()
+  }
+
+  if (switchPs?.stdin && !switchPs.stdin.destroyed) {
     switchPs.stdin.write(`${targetIndex}|${from}\n`)
   }
+}
+
+function startSwitchProcess() {
+  if (!switchScriptPath || (switchPs && !switchPs.killed && switchPs.exitCode === null)) return
+
+  switchPs = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', switchScriptPath])
+
+  switchPs.stderr.on('data', (data: Buffer) => {
+    const message = data.toString().trim()
+    if (message) {
+      console.warn(`[desktop-watcher] ${message}`)
+    }
+  })
+
+  switchPs.on('exit', (code, signal) => {
+    if (code !== 0 && code !== null) {
+      console.warn(`[desktop-watcher] switch process exited with code ${code}${signal ? ` (${signal})` : ''}`)
+    }
+    switchPs = null
+  })
+
+  switchPs.on('error', (error) => {
+    console.warn('[desktop-watcher] failed to start switch process:', error)
+    switchPs = null
+  })
 }
