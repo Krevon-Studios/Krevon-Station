@@ -9,8 +9,9 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 ## Features
 
 - **Claude Code integration** — live tool call display, session start notification, task completion with cost/turns/duration
+- **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
-- **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control
+- **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
 - **Dynamic resize** — pill expands/contracts smoothly per state
 - **Always on top** — hides behind fullscreen apps automatically
@@ -36,11 +37,11 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 
 | Mode | Trigger | Size (Closed → Hovered) |
 |---|---|---|
-| `idle` | Default / no activity | 160×32 → 320×72 |
-| `session_start` | Claude Code session begins | 160×32 → 320×80 |
-| `tool_active` | Claude Code tool call | 160×32 → 340×80 |
-| `task_done` | Claude Code task completes | 160×32 → 360×80 |
-| `media` | SMTC media session active | 160×32 → 420×110 |
+| `idle` | Default / no activity (shows live clock) | 210×32 → 320×72 |
+| `session_start` | Claude Code session begins | 210×32 → 320×80 |
+| `tool_active` | Claude Code tool call | 210×32 → 340×80 |
+| `task_done` | Claude Code task completes | 210×32 → 360×80 |
+| `media` | SMTC media session active | 240×32 → 420×110 |
 
 Claude Code states always override media state. When Claude finishes, media resumes if something is playing.
 
@@ -174,7 +175,7 @@ PowerShell script (di-control.ps1 in %TEMP%)
 
 Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-stable). Fires events on any SMTC change → sends full sessions array to main → forwards to renderer via `island:media` IPC. Starts 1.5s after app ready to avoid blocking main thread startup.
 
-**Multi-Source Tracking:** When multiple media sources are active (e.g. Spotify and Chrome), users can cycle through them using arrow buttons in the pill. The app tracks the active session by its `sourceAppId` rather than index, preventing UI jumps when Windows dynamically re-orders the underlying session array based on recent playback.
+**Multi-Source Tracking:** When multiple media sources are active (e.g. Spotify and Chrome), users can cycle through them using interactive pagination dots in the pill. The app tracks the active session by its `sourceAppId` rather than index, preventing UI jumps when Windows dynamically re-orders the underlying session array based on recent playback. Auto-switching prioritizes actively playing sources automatically unless the user manually overrides it.
 
 ---
 
@@ -265,7 +266,7 @@ Unknown tools are title-cased from their snake_case name.
 - Play something in Spotify or a browser — appears within 1.5s of app start
 
 **Media controls wrong session**
-- WinRT control targets session by `SourceAppUserModelId`; select correct source using `<` `>` arrows in pill
+- WinRT control targets session by `SourceAppUserModelId`; select correct source using the pagination dots in the pill
 - Controls take ~300–800ms (PowerShell startup + WinRT init)
 
 ---

@@ -14,16 +14,22 @@ const SPRING_CONTENT = { type: 'spring', stiffness: 320, damping: 32, mass: 0.7 
 
 // ── Sizes ─────────────────────────────────────────────────────────────────────
 
-// Idle closed pill: very thin notch-like bar at top
-const IDLE_CLOSED   = { w: 160, h: 32 }
+// Idle closed pill sizes per state
+const CLOSED_SIZES: Record<IslandState['mode'], { w: number; h: number }> = {
+  idle: { w: 210, h: 32 },
+  session_start: { w: 210, h: 32 },
+  tool_active: { w: 210, h: 32 },
+  task_done: { w: 210, h: 32 },
+  media: { w: 240, h: 32 },
+}
 
 // Expanded sizes per state (when hovered or active)
 const EXPANDED: Record<IslandState['mode'], { w: number; h: number }> = {
-  idle:          { w: 320, h: 72 },
+  idle: { w: 320, h: 72 },
   session_start: { w: 320, h: 80 },
-  tool_active:   { w: 340, h: 80 },
-  task_done:     { w: 360, h: 80 },
-  media:         { w: 420, h: 110 },
+  tool_active: { w: 340, h: 80 },
+  task_done: { w: 360, h: 80 },
+  media: { w: 420, h: 110 },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -31,22 +37,22 @@ const EXPANDED: Record<IslandState['mode'], { w: number; h: number }> = {
 function sourceLabel(raw: string): string {
   const s = raw.toLowerCase().replace(/\.exe$/i, '')
   const map: Record<string, string> = {
-    'spotifyab':        'Spotify',
-    'spotify':          'Spotify',
-    'chrome':           'Chrome',
-    'firefox':          'Firefox',
-    'msedge':           'Edge',
-    'microsoft.edge':   'Edge',
-    'opera':            'Opera',
-    'brave':            'Brave',
+    'spotifyab': 'Spotify',
+    'spotify': 'Spotify',
+    'chrome': 'Chrome',
+    'firefox': 'Firefox',
+    'msedge': 'Edge',
+    'microsoft.edge': 'Edge',
+    'opera': 'Opera',
+    'brave': 'Brave',
     'windowsmediaplayer': 'Media Player',
-    'vlc':              'VLC',
-    'foobar2000':       'foobar2000',
-    'itunes':           'iTunes',
-    'tidal':            'TIDAL',
-    'deezer':           'Deezer',
-    'amazon':           'Amazon Music',
-    'youtubemusic':     'YT Music',
+    'vlc': 'VLC',
+    'foobar2000': 'foobar2000',
+    'itunes': 'iTunes',
+    'tidal': 'TIDAL',
+    'deezer': 'Deezer',
+    'amazon': 'Amazon Music',
+    'youtubemusic': 'YT Music',
   }
   for (const [k, v] of Object.entries(map)) {
     if (s.includes(k)) return v
@@ -57,7 +63,12 @@ function sourceLabel(raw: string): string {
 // ── Content: Idle ─────────────────────────────────────────────────────────────
 
 function IdleExpandedContent() {
-  const now = new Date()
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const date = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
 
@@ -135,7 +146,7 @@ function DoneExpandedContent({ state }: { state: Extract<IslandState, { mode: 't
   const secs = state.durationMs > 0 ? (state.durationMs / 1000).toFixed(1) + 's' : null
   const cost = state.cost <= 0 ? null
     : state.cost < 0.001 ? '<$0.001'
-    : `$${state.cost.toFixed(3)}`
+      : `$${state.cost.toFixed(3)}`
   return (
     <motion.div
       key="done-exp"
@@ -162,11 +173,12 @@ function DoneExpandedContent({ state }: { state: Extract<IslandState, { mode: 't
 // ── Content: Media ─────────────────────────────────────────────────────────────
 
 function MediaExpandedContent({
-  state, nextMedia, prevMedia
+  state, nextMedia, prevMedia, setMediaIndex
 }: {
   state: Extract<IslandState, { mode: 'media' }>
   nextMedia: () => void
   prevMedia: () => void
+  setMediaIndex: (index: number) => void
 }) {
   const { session } = state
   const isPlaying = session.status === 'playing'
@@ -186,40 +198,42 @@ function MediaExpandedContent({
     >
       {/* Album art */}
       <div className="relative w-[72px] h-[72px] shrink-0">
-        {session.thumbnail ? (
-          <img
-            src={session.thumbnail}
-            alt=""
-            className="w-full h-full rounded-[12px] object-cover"
-            style={{ imageRendering: 'auto' }}
-          />
-        ) : (
-          <div className={`w-full h-full rounded-[12px] flex items-center justify-center
-            ${isPlaying ? 'bg-[#34D399]/12 border border-[#34D399]/20' : 'bg-white/8 border border-white/10'}`}>
-            <Music2 size={22} color="rgba(255,255,255,0.3)" strokeWidth={1.5} />
-          </div>
-        )}
-
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={session.sourceAppId}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.15 }}
+            className="w-full h-full"
+          >
+            {session.thumbnail ? (
+              <img
+                src={session.thumbnail}
+                alt=""
+                className="w-full h-full rounded-[12px] object-cover"
+                style={{ imageRendering: 'auto' }}
+              />
+            ) : (
+              <div className={`w-full h-full rounded-[12px] flex items-center justify-center
+                ${isPlaying ? 'bg-[#34D399]/12 border border-[#34D399]/20' : 'bg-white/8 border border-white/10'}`}>
+                <Music2 size={22} color="rgba(255,255,255,0.3)" strokeWidth={1.5} />
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Track info + controls */}
       <div className="flex flex-col gap-[10px] min-w-0 flex-1">
         {/* Source + settings row */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-[5px]">
-            {state.sessions?.length > 1 && (
-              <button onClick={(e) => { e.stopPropagation(); prevMedia() }} className="active:scale-90 text-white/30 hover:text-white/80 transition-colors">
-                <ChevronLeft size={12} strokeWidth={3} />
-              </button>
-            )}
-            <Music2 size={9} color="rgba(255,255,255,0.3)" />
-            <span className="text-[10px] text-white/30 tracking-wide">
-              {sourceLabel(session.sourceAppId)} {state.sessions?.length > 1 ? `(${state.activeIndex + 1}/${state.sessions.length})` : ''}
+          <div className="flex items-center gap-[6px]">
+            <span className="text-[10px] text-white/40 tracking-wide font-medium">
+              {sourceLabel(session.sourceAppId)}
             </span>
             {state.sessions?.length > 1 && (
-              <button onClick={(e) => { e.stopPropagation(); nextMedia() }} className="active:scale-90 text-white/30 hover:text-white/80 transition-colors">
-                <ChevronRight size={12} strokeWidth={3} />
-              </button>
+              <PaginationDots count={state.sessions.length} activeIndex={state.activeIndex} setIndex={setMediaIndex} />
             )}
           </div>
           <div className={`w-[6px] h-[6px] rounded-full ${isPlaying ? 'bg-[#34D399]' : 'bg-white/20'}`}
@@ -227,13 +241,24 @@ function MediaExpandedContent({
         </div>
 
         {/* Title & artist */}
-        <div className="flex flex-col gap-[3px] min-w-0">
-          <span className="text-[14px] font-semibold text-white leading-none tracking-tight truncate">
-            {session.title || 'Now Playing'}
-          </span>
-          {session.artist && (
-            <span className="text-[11px] text-white/45 leading-none truncate">{session.artist}</span>
-          )}
+        <div className="flex flex-col gap-[3px] min-w-0 h-[30px] justify-center">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={session.sourceAppId + session.title}
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              transition={{ duration: 0.15 }}
+              className="flex flex-col gap-[3px] min-w-0"
+            >
+              <span className="text-[14px] font-semibold text-white leading-none tracking-tight truncate">
+                {session.title || 'Now Playing'}
+              </span>
+              {session.artist && (
+                <span className="text-[11px] text-white/45 leading-none truncate">{session.artist}</span>
+              )}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Controls */}
@@ -244,7 +269,7 @@ function MediaExpandedContent({
           <CtrlBtn onClick={ctrl('play-pause')} label={isPlaying ? 'Pause' : 'Play'}>
             {isPlaying
               ? <Pause size={20} fill="white" color="white" />
-              : <Play  size={20} fill="white" color="white" />
+              : <Play size={20} fill="white" color="white" />
             }
           </CtrlBtn>
           <CtrlBtn onClick={ctrl('next')} label="Next" disabled={!session.hasSkip}>
@@ -259,27 +284,53 @@ function MediaExpandedContent({
 // ── Closed pill content (tiny notch state) ────────────────────────────────────
 
 function ClosedContent({ state }: { state: IslandState }) {
-  const isMedia = state.mode === 'media'
   const isClaude = state.mode === 'tool_active' || state.mode === 'session_start' || state.mode === 'task_done'
+  const isPlayingMedia = state.mode === 'media' && state.session.status === 'playing'
+
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+
+  if (isPlayingMedia) {
+    const mediaState = state as Extract<IslandState, { mode: 'media' }>
+    const { session } = mediaState
+    return (
+      <motion.div
+        key="closed-media"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1, transition: { delay: 0.1, duration: 0.15 } }}
+        exit={{ opacity: 0, transition: { duration: 0.08 } }}
+        className="flex items-center gap-[10px] px-5 w-full h-full"
+      >
+        <TinyVisualizer isPlaying={true} />
+        <span className="text-[12px] text-white/90 font-medium truncate leading-none mt-[1px]">
+          {session.title || 'Unknown Media'}
+        </span>
+      </motion.div>
+    )
+  }
+
+  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const date = now.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
 
   return (
     <motion.div
-      key="closed"
+      key="closed-default"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1, transition: { delay: 0.1, duration: 0.15 } }}
       exit={{ opacity: 0, transition: { duration: 0.08 } }}
-      className="flex items-center gap-[6px] px-4"
+      className="flex items-center justify-center w-full h-full"
     >
-      {isClaude && (
+      {isClaude ? (
         <span className="w-[5px] h-[5px] rounded-full bg-[#7C6AFF] shrink-0"
           style={{ boxShadow: '0 0 5px #7C6AFF' }} />
-      )}
-      {isMedia && (
-        <span className="w-[5px] h-[5px] rounded-full bg-[#34D399] shrink-0"
-          style={{ boxShadow: '0 0 5px #34D399' }} />
-      )}
-      {!isClaude && !isMedia && (
-        <span className="w-[4px] h-[4px] rounded-full bg-white/20 shrink-0" />
+      ) : (
+        <div className="flex items-center justify-center gap-[8px] text-white w-full px-4">
+          <span className="text-[12px] font-medium tracking-wide whitespace-nowrap">{date}</span>
+          <span className="text-[12px] font-medium tracking-wide whitespace-nowrap">{time}</span>
+        </div>
       )}
     </motion.div>
   )
@@ -287,12 +338,57 @@ function ClosedContent({ state }: { state: IslandState }) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+function PaginationDots({ count, activeIndex, setIndex }: { count: number, activeIndex: number, setIndex: (i: number) => void }) {
+  return (
+    <div className="flex items-center ml-1" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+      {Array.from({ length: count }).map((_, i) => (
+        <button
+          key={i}
+          onClick={(e) => { e.stopPropagation(); setIndex(i); }}
+          className="py-[4px] px-[2px] group"
+        >
+          <div className={`h-[5px] rounded-full transition-all duration-300 ${
+            i === activeIndex ? 'w-[14px] bg-white' : 'w-[5px] bg-white/30 group-hover:bg-white/60'
+          }`} />
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function TinyVisualizer({ isPlaying }: { isPlaying: boolean }) {
+  return (
+    <div className="flex items-center gap-[2px] h-[12px] shrink-0">
+      <motion.div
+        className="w-[2px] bg-[#34D399] rounded-full"
+        animate={{ height: isPlaying ? [4, 10, 4, 12, 4] : 3 }}
+        transition={{ repeat: Infinity, duration: 1.1, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="w-[2px] bg-[#34D399] rounded-full"
+        animate={{ height: isPlaying ? [6, 4, 12, 6, 6] : 3 }}
+        transition={{ repeat: Infinity, duration: 1.3, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="w-[2px] bg-[#34D399] rounded-full"
+        animate={{ height: isPlaying ? [4, 12, 4, 8, 4] : 3 }}
+        transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+      />
+      <motion.div
+        className="w-[2px] bg-[#34D399] rounded-full"
+        animate={{ height: isPlaying ? [8, 4, 10, 4, 8] : 3 }}
+        transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
+      />
+    </div>
+  )
+}
+
 function CtrlBtn({
   children, onClick, label, disabled
 }: {
-  children:  React.ReactNode
-  onClick:   (e: React.MouseEvent) => void
-  label:     string
+  children: React.ReactNode
+  onClick: (e: React.MouseEvent) => void
+  label: string
   disabled?: boolean
 }) {
   return (
@@ -349,11 +445,17 @@ function Sep() {
 }
 
 export function Island() {
-  const { state, nextMedia, prevMedia } = useIslandStore()
+  const { state, nextMedia, prevMedia, setMediaIndex } = useIslandStore()
   const [hovered, setHovered] = useState(false)
 
   const isExpanded = hovered
-  const target     = isExpanded ? EXPANDED[state.mode] : IDLE_CLOSED
+
+  let closedTarget = CLOSED_SIZES[state.mode]
+  if (state.mode === 'media' && state.session.status !== 'playing') {
+    closedTarget = CLOSED_SIZES['idle']
+  }
+
+  const target = isExpanded ? EXPANDED[state.mode] : closedTarget
 
   // Hover state is driven entirely by the main process via screen.getCursorScreenPoint()
   // polling — no renderer-side mousemove math or getBoundingClientRect needed.
@@ -405,7 +507,7 @@ export function Island() {
             ) : state.mode === 'task_done' ? (
               <DoneExpandedContent key="done-exp" state={state} />
             ) : state.mode === 'media' ? (
-              <MediaExpandedContent key="media-exp" state={state} nextMedia={nextMedia} prevMedia={prevMedia} />
+              <MediaExpandedContent key="media-exp" state={state} nextMedia={nextMedia} prevMedia={prevMedia} setMediaIndex={setMediaIndex} />
             ) : null}
           </AnimatePresence>
         </div>

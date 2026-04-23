@@ -26,6 +26,7 @@ export interface IslandStore {
   state: IslandState
   nextMedia: () => void
   prevMedia: () => void
+  setMediaIndex: (index: number) => void
 }
 
 export function useIslandStore(): IslandStore {
@@ -33,6 +34,7 @@ export function useIslandStore(): IslandStore {
   const timerRef  = useRef<ReturnType<typeof setTimeout>>()
   const mediaSessionsRef  = useRef<MediaSessionData[]>([])
   const mediaActiveIndexRef = useRef<number>(0)
+  const lastManualSwitchRef = useRef<number>(0)
   const claudeRef = useRef(false)
 
   const updateMediaState = useCallback(() => {
@@ -110,14 +112,29 @@ export function useIslandStore(): IslandStore {
       const previousActiveSession = mediaSessionsRef.current[mediaActiveIndexRef.current]
       mediaSessionsRef.current = sessions
 
-      if (previousActiveSession && sessions.length > 0) {
-        const newIndex = sessions.findIndex(s => s.sourceAppId === previousActiveSession.sourceAppId)
-        if (newIndex !== -1) {
-          mediaActiveIndexRef.current = newIndex
-        } else {
-          mediaActiveIndexRef.current = 0
+      if (sessions.length > 0) {
+        let nextIndex = 0
+        if (previousActiveSession) {
+          const newIndex = sessions.findIndex(s => s.sourceAppId === previousActiveSession.sourceAppId)
+          if (newIndex !== -1) {
+            nextIndex = newIndex
+          }
         }
-      } else if (sessions.length === 0) {
+
+        // Auto-switch to playing media if the currently focused one is paused
+        // and user hasn't manually switched in the last 10 seconds
+        const focusedSession = sessions[nextIndex]
+        if (focusedSession && focusedSession.status !== 'playing') {
+          if (Date.now() - lastManualSwitchRef.current > 10000) {
+            const playingIndex = sessions.findIndex(s => s.status === 'playing')
+            if (playingIndex !== -1) {
+              nextIndex = playingIndex
+            }
+          }
+        }
+
+        mediaActiveIndexRef.current = nextIndex
+      } else {
         mediaActiveIndexRef.current = 0
       }
 
@@ -136,11 +153,18 @@ export function useIslandStore(): IslandStore {
   return {
     state,
     nextMedia: () => {
+      lastManualSwitchRef.current = Date.now()
       mediaActiveIndexRef.current++
       updateMediaState()
     },
     prevMedia: () => {
+      lastManualSwitchRef.current = Date.now()
       mediaActiveIndexRef.current--
+      updateMediaState()
+    },
+    setMediaIndex: (index: number) => {
+      lastManualSwitchRef.current = Date.now()
+      mediaActiveIndexRef.current = index
       updateMediaState()
     }
   }

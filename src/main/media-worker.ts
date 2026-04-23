@@ -52,6 +52,8 @@ try {
     }
   }
 
+  const monitor = new SMTCMonitor()
+
   const sendAll = () => {
     const all = SMTCMonitor.getMediaSessions()
     const current = SMTCMonitor.getCurrentMediaSession()
@@ -67,8 +69,9 @@ try {
   }
 
   sendAll()
-
-  const monitor = new SMTCMonitor()
+  setTimeout(sendAll, 500)
+  setTimeout(sendAll, 1500)
+  setTimeout(sendAll, 3000)
 
   monitor.on('session-media-changed',    sendAll)
   monitor.on('session-playback-changed', sendAll)
