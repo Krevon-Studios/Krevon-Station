@@ -24,7 +24,6 @@ export function Taskbar() {
       className="w-full h-[32px] bg-black flex items-center justify-between px-4 select-none relative z-10"
       style={{
         WebkitAppRegion: 'no-drag',
-        boxShadow: '0 6px 24px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.35)',
       } as React.CSSProperties}
     >
 
@@ -47,7 +46,7 @@ export function Taskbar() {
 
       {/* Right side: System tray icons and time */}
       <button
-        className="flex items-center h-full gap-[12px] opacity-85 hover:opacity-100 transition-opacity hover:bg-white/5 px-3 rounded-md cursor-pointer"
+        className="flex items-center gap-[12px] opacity-85 hover:opacity-100 transition-all duration-200 hover:bg-white/5 px-3 py-[5px] rounded-xl cursor-pointer"
         onClick={() => console.log('Open menu panel')}
       >
         <Wifi size={14} color="#d4d4d4" />

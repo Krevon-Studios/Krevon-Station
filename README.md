@@ -211,6 +211,33 @@ Renderer mounts
 
 Switching sends an optimistic IPC push to the renderer immediately for instant visual feedback, then the registry monitor confirms the actual desktop change.
 
+### App Bar Registration
+
+```
+App start
+    │
+    ├─ AppBarHelper.exe (compiled on first run from AppBarHelper.source.cs)
+    │      │
+    │      ├─ SetProcessDpiAwarenessContext(PerMonitorV2)
+    │      │      → all coordinates are in physical pixels
+    │      │
+    │      ├─ GetDpiForMonitor(primary) → convert 32 DIP height to physical px
+    │      │      e.g. 32 DIP × 1.25 = 40 physical px at 125% scaling
+    │      │
+    │      └─ SHAppBarMessage(ABM_SETPOS, edge=top, height=40px)
+    │             → shell reserves 40 physical px; apps/maximised windows
+    │               cannot occupy that strip
+    │
+    ├─ helper stdout "left|top|right|bottom" (physical px)
+    │      → appbar.ts divides by scaleFactor → DIPs for Electron setBounds
+    │      → taskbarWin.setBounds(rect)
+    │
+    └─ pinIslandToTop() called after every rect update
+           → islandWin.setBounds({y: 0})  (snaps inside the reserved zone)
+           → if Windows overrides the position during work-area settling,
+             retries up to 5× at 50 ms intervals until it sticks
+```
+
 ---
 
 ## IPC Channels
@@ -285,6 +312,7 @@ Unknown tools are title-cased from their snake_case name.
 - **Always on top** — `setAlwaysOnTop(true, 'screen-saver')` hides behind fullscreen apps
 - **Non-focusable** — `focusable: false`; keyboard focus never stolen
 - **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled over island hover zone and taskbar
+- **Registered App Bar** — the taskbar window is registered with the Windows shell via `SHAppBarMessage` so the OS reserves the top 32px and all apps/maximised windows respect it as unusable space; the bar survives display-metrics changes
 
 ---
 

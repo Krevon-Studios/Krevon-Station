@@ -1,9 +1,10 @@
-import { app, ipcMain } from 'electron'
-import { createIslandWindow } from './window'
+import { app, ipcMain, screen } from 'electron'
+import { createIslandWindow, createTaskbarWindow } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
 import { createTray } from './tray'
+import { attachAppBar } from './appbar'
 
 app.setName('Dynamic Island')
 
@@ -13,16 +14,54 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.whenReady().then(() => {
-  const win = createIslandWindow()
+  const taskbarWin = createTaskbarWindow()
+  const islandWin = createIslandWindow()
+  let appBarRect = { left: 0, top: 0, right: 0, bottom: 32 }
+  let taskbarShown = false
+  const detachAppBar = attachAppBar(taskbarWin, (rect) => {
+    appBarRect = rect
+    taskbarWin.setBounds({
+      x: rect.left,
+      y: rect.top,
+      width: rect.right - rect.left,
+      height: rect.bottom - rect.top,
+    })
+    if (!taskbarShown && !taskbarWin.isDestroyed()) {
+      taskbarShown = true
+      taskbarWin.show()
+    }
+    // Re-pin the island every time the app bar reports its position.
+    // Windows can nudge it down to the work area start during work-area
+    // settling; the retry loop catches the cases where the first attempt
+    // is overridden before it sticks.
+    pinIslandToTop()
+  })
 
-  startHookServer(win)
-  startMediaWatcher(win)
-  startDesktopWatcher(win)
-  createTray(win)
+  // Pin the island the moment it becomes visible — the work area may
+  // already have changed by the time ready-to-show fires.
+  islandWin.once('show', () => pinIslandToTop())
 
-  // ── Hover detection (main process polling) ─────────────────────────────────
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { screen } = require('electron') as typeof import('electron')
+  startHookServer(islandWin)
+  startMediaWatcher(islandWin)
+  startDesktopWatcher(taskbarWin)
+  createTray([taskbarWin, islandWin])
+
+  // Snap the island window to y=0 (full display top, inside the reserved bar).
+  // If Windows overrides the position during work-area settling, retry with a
+  // short back-off until it sticks (capped at 5 attempts = 250 ms worst-case).
+  function pinIslandToTop(retriesLeft = 5) {
+    if (islandWin.isDestroyed()) return
+    const { bounds } = screen.getPrimaryDisplay()
+    islandWin.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: islandWin.getBounds().height,
+    })
+    if (islandWin.getBounds().y !== bounds.y && retriesLeft > 0) {
+      setTimeout(() => pinIslandToTop(retriesLeft - 1), 50)
+    }
+  }
 
   let hoverActive = false
   let interactActive = false
@@ -34,50 +73,107 @@ app.whenReady().then(() => {
 
   setInterval(() => {
     const { x, y } = screen.getCursorScreenPoint()
-    const b = win.getBounds()
+    const bounds = islandWin.getBounds()
 
-    // The pill is horizontally centered in the window, flush with the top edge
-    const cx = b.x + b.width / 2
+    // The pill is horizontally centered in the window, flush with the top edge.
+    const centerX = bounds.x + bounds.width / 2
     const overIsland =
-      x >= cx - hitBox.w / 2 && x <= cx + hitBox.w / 2 &&
-      y >= b.y && y <= b.y + hitBox.h
+      x >= centerX - hitBox.w / 2 && x <= centerX + hitBox.w / 2 &&
+      y >= bounds.y && y <= bounds.y + hitBox.h
 
-    // Top bar is always interactive for buttons
-    const overTaskbar = y >= b.y && y <= b.y + 32
-    const shouldInteract = overIsland || overTaskbar
-
-    if (shouldInteract !== interactActive) {
-      interactActive = shouldInteract
-      win.setIgnoreMouseEvents(!shouldInteract, { forward: true })
+    if (overIsland !== interactActive) {
+      interactActive = overIsland
+      islandWin.setIgnoreMouseEvents(!overIsland, { forward: true })
     }
 
     if (overIsland !== hoverActive) {
       hoverActive = overIsland
-      win.webContents.send('island:hover', overIsland)
+      islandWin.webContents.send('island:hover', overIsland)
     }
   }, 16)
 
-  // Click-through: renderer can still fine-tune (e.g. exact pill hit-test)
   ipcMain.on('set-ignore-mouse', (_event, ignore: boolean) => {
-    win.setIgnoreMouseEvents(ignore, { forward: true })
+    islandWin.setIgnoreMouseEvents(ignore, { forward: true })
   })
 
-  // Media controls
   ipcMain.on('control-media', (_event, action: 'play-pause' | 'next' | 'prev', sourceAppId: string) => {
     controlMedia(action, sourceAppId)
   })
 
-  // Desktop controls
   ipcMain.on('switch-virtual-desktop', (_event, targetIndex: number) => {
     switchVirtualDesktop(targetIndex)
   })
 
+  const syncTaskbarWindow = () => {
+    const width = appBarRect.right - appBarRect.left
+    const height = appBarRect.bottom - appBarRect.top
+    taskbarWin.setBounds({
+      x: appBarRect.left,
+      y: appBarRect.top,
+      width: width > 0 ? width : taskbarWin.getBounds().width,
+      height: height > 0 ? height : taskbarWin.getBounds().height,
+    })
+  }
+
+  const syncIslandWindow = () => {
+    const { bounds } = screen.getPrimaryDisplay()
+    islandWin.setBounds({
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: islandWin.getBounds().height,
+    })
+  }
+
+  const handleDisplayChange = () => {
+    syncTaskbarWindow()
+    syncIslandWindow()
+  }
+  screen.on('display-metrics-changed', handleDisplayChange)
+  screen.on('display-added', handleDisplayChange)
+  screen.on('display-removed', handleDisplayChange)
 
   if (process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    taskbarWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=taskbar`)
+    islandWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=island`)
   } else {
-    win.loadFile('out/renderer/index.html')
+    taskbarWin.loadFile('out/renderer/index.html', { search: 'view=taskbar' })
+    islandWin.loadFile('out/renderer/index.html', { search: 'view=island' })
   }
+
+  let cleanedUp = false
+  const cleanup = () => {
+    if (cleanedUp) return
+    cleanedUp = true
+    screen.off('display-metrics-changed', handleDisplayChange)
+    screen.off('display-added', handleDisplayChange)
+    screen.off('display-removed', handleDisplayChange)
+    detachAppBar()
+  }
+
+  app.on('before-quit', cleanup)
+  app.on('will-quit', cleanup)
+  taskbarWin.on('closed', cleanup)
+  islandWin.on('closed', cleanup)
+
+  process.once('SIGINT', () => {
+    cleanup()
+    process.exit(0)
+  })
+  process.once('SIGTERM', () => {
+    cleanup()
+    process.exit(0)
+  })
+  process.once('uncaughtException', (error) => {
+    console.error(error)
+    cleanup()
+    process.exit(1)
+  })
+  process.once('unhandledRejection', (reason) => {
+    console.error(reason)
+    cleanup()
+    process.exit(1)
+  })
 })
 
 app.on('window-all-closed', () => app.quit())

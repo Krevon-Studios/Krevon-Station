@@ -1,7 +1,7 @@
 import { Tray, Menu, nativeImage, app } from 'electron'
 import type { BrowserWindow } from 'electron'
 
-export function createTray(win: BrowserWindow): void {
+export function createTray(wins: BrowserWindow[]): void {
   const icon = buildTrayIcon()
   const tray = new Tray(icon)
   tray.setToolTip('Dynamic Island')
@@ -10,10 +10,11 @@ export function createTray(win: BrowserWindow): void {
     {
       label: 'Show / Hide',
       click: () => {
-        if (win.isVisible()) {
-          win.hide()
+        const anyVisible = wins.some((win) => win.isVisible())
+        if (anyVisible) {
+          wins.forEach((win) => win.hide())
         } else {
-          win.show()
+          wins.forEach((win) => win.show())
         }
       }
     },

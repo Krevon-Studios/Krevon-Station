@@ -1,19 +1,61 @@
 import { BrowserWindow, screen, nativeImage } from 'electron'
 import { join } from 'path'
 
+export const TASKBAR_H = 32
+
 // Fixed window size — large enough for fully expanded state.
 // The pill itself shrinks/grows via CSS; we never resize the window on hover.
 export const WIN_W  = 520   // wide enough for media expanded
 export const WIN_H  = 200   // pill(110) + shadow(~40) + cursor margin(50)
 
-export function createIslandWindow(): BrowserWindow {
+function buildBaseOptions() {
   const { bounds } = screen.getPrimaryDisplay()
+
+  return { bounds }
+}
+
+export function createTaskbarWindow(): BrowserWindow {
+  const { bounds } = buildBaseOptions()
+
+  const win = new BrowserWindow({
+    width: bounds.width,
+    height: TASKBAR_H,
+    x: bounds.x,
+    y: bounds.y,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    skipTaskbar: true,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    focusable: false,
+    hasShadow: false,
+    show: false,
+    icon: buildIcon(),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false
+    }
+  })
+
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+
+  return win
+}
+
+export function createIslandWindow(): BrowserWindow {
+  const { bounds } = buildBaseOptions()
 
   const win = new BrowserWindow({
     width: bounds.width,
     height: WIN_H,
-    x: 0,
-    y: 0,          // flush with top edge; pill CSS handles the 6px gap visually
+    x: bounds.x,
+    y: bounds.y,   // flush with top edge; pill CSS handles the 6px gap visually
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',

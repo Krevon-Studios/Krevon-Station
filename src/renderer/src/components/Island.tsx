@@ -296,17 +296,25 @@ function ClosedContent({ state }: { state: IslandState }) {
   if (isPlayingMedia) {
     const mediaState = state as Extract<IslandState, { mode: 'media' }>
     const { session } = mediaState
+    const closedMediaTitle = session.title || 'Unknown Media'
+    const shouldCenterClosedMedia = closedMediaTitle.length <= 18
     return (
       <motion.div
         key="closed-media"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1, transition: { delay: 0.1, duration: 0.15 } }}
         exit={{ opacity: 0, transition: { duration: 0.08 } }}
-        className="flex items-center gap-[10px] px-5 w-full h-full"
+        className={`flex items-center gap-[10px] px-5 w-full h-full ${
+          shouldCenterClosedMedia ? 'justify-center' : ''
+        }`}
       >
         <TinyVisualizer isPlaying={true} />
-        <span className="text-[12px] text-white/90 font-medium truncate leading-none mt-[1px]">
-          {session.title || 'Unknown Media'}
+        <span
+          className={`text-[12px] text-white/90 font-medium truncate leading-none mt-[1px] ${
+            shouldCenterClosedMedia ? 'max-w-[140px] text-center' : 'flex-1'
+          }`}
+        >
+          {closedMediaTitle}
         </span>
       </motion.div>
     )
@@ -529,4 +537,3 @@ export function Island() {
     </div>
   )
 }
-
