@@ -78,6 +78,13 @@ interface IslandAPI {
   setWifiEnabled:   (enable: boolean)   => Promise<void>
   connectWifi:      (ssid: string)      => Promise<void>
   getWifiState:     ()                  => Promise<{ enabled: boolean }>
+
+  // System actions
+  getUserInfo:     ()               => Promise<{ avatar: string | null; name: string }>
+  systemAction:    (action: string) => Promise<void>
+
+  // Drawer sizing
+  setDrawerHeight: (h: number)      => void
 }
 
 declare interface Window {

@@ -112,6 +112,18 @@ app.whenReady().then(() => {
     if (!drawerWin.isDestroyed()) drawerWin.hide()
   })
 
+  // Resize drawer window to match actual card height — eliminates transparent dead zone
+  ipcMain.on('drawer:resize', (_e, h: number) => {
+    if (drawerWin.isDestroyed()) return
+    const { bounds } = screen.getPrimaryDisplay()
+    drawerWin.setBounds({
+      x: bounds.x + bounds.width - 340,
+      y: bounds.y + TASKBAR_H,
+      width: 340,
+      height: Math.max(Math.ceil(h), 60),
+    })
+  })
+
   // ── IPC: Volume — writes directly to Python process stdin ──────────────────
 
   ipcMain.handle('set-system-volume', (_e, volume: number) => {
@@ -214,6 +226,107 @@ app.whenReady().then(() => {
     return new Promise<void>((resolve) => {
       exec(`netsh wlan connect name="${ssid}"`, { windowsHide: true }, () => resolve())
     })
+  })
+
+  // ── IPC: User info (avatar + display name) ────────────────────────────────
+
+  ipcMain.handle('get-user-info', async () => {
+    const fs   = require('fs')   as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    const os   = require('os')   as typeof import('os')
+
+    // Display name — FullName from local user, fallback to login name
+    const name: string = await new Promise(resolve => {
+      exec(
+        'powershell.exe -NoProfile -NonInteractive -Command "try{(Get-LocalUser -Name $env:USERNAME).FullName}catch{$env:USERNAME}"',
+        { windowsHide: true },
+        (_err, stdout) => resolve((stdout.trim() || os.userInfo().username))
+      )
+    })
+
+    const readImg = (p: string): string | null => {
+      try {
+        const data = fs.readFileSync(p)
+        const isPng  = data[0] === 0x89 && data[1] === 0x50
+        const isJpeg = data[0] === 0xFF && data[1] === 0xD8
+        const isBmp  = data[0] === 0x42 && data[1] === 0x4D
+        const isWebP = data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 &&
+                       data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50
+        if (!isPng && !isJpeg && !isBmp && !isWebP) return null
+        const mime = isPng ? 'png' : isJpeg ? 'jpeg' : isBmp ? 'bmp' : 'webp'
+        return `data:image/${mime};base64,${data.toString('base64')}`
+      } catch { return null }
+    }
+
+    let avatar: string | null = null
+
+    // Get user SID (needed for Win11 MS account picture paths)
+    const sid: string = await new Promise(resolve => {
+      exec(
+        `powershell.exe -NoProfile -NonInteractive -Command "(New-Object System.Security.Principal.NTAccount($env:USERNAME)).Translate([System.Security.Principal.SecurityIdentifier]).Value"`,
+        { windowsHide: true },
+        (_err, stdout) => resolve(stdout.trim())
+      )
+    })
+
+    // Try 1: HKLM AccountPicture\Users\<SID> (Win11 MS account location)
+    if (sid) {
+      const regDump: string = await new Promise(resolve => {
+        exec(
+          `powershell.exe -NoProfile -NonInteractive -Command "try{$k=Get-Item 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AccountPicture\\Users\\${sid}' -EA Stop;$k.GetValueNames()|%%{$_+'='+$k.GetValue($_)}}catch{'MISSING'}"`,
+          { windowsHide: true },
+          (_err, stdout) => resolve(stdout.trim())
+        )
+      })
+      const imgPaths = regDump.match(/^Image\d+=(.+)$/gm)
+        ?.map(l => l.replace(/^Image\d+=/, '').trim())
+        .filter(p => p && fs.existsSync(p))
+        .sort((a, b) => fs.statSync(b).size - fs.statSync(a).size) ?? []
+      for (const p of imgPaths) {
+        avatar = readImg(p)
+        if (avatar) break
+      }
+    }
+
+    // Try 2: C:\Users\Public\AccountPictures\<SID>\ (Win11 file cache)
+    if (!avatar && sid) {
+      try {
+        const dir = `C:\\Users\\Public\\AccountPictures\\${sid}`
+        const allFiles: string[] = fs.existsSync(dir) ? fs.readdirSync(dir) : []
+        const imgs = allFiles
+          .filter((f: string) => /\.(png|jpg|jpeg|bmp|webp)$/i.test(f))
+          .sort((a: string, b: string) => (parseInt(b.match(/(\d+)/)?.[1] ?? '0')) - (parseInt(a.match(/(\d+)/)?.[1] ?? '0')))
+        for (const f of imgs) { avatar = readImg(path.join(dir, f)); if (avatar) break }
+      } catch { /**/ }
+    }
+
+    // Try 3: ProgramData user-* files (largest numbered first)
+    if (!avatar) {
+      try {
+        const dir = 'C:\\ProgramData\\Microsoft\\User Account Pictures'
+        const allFiles: string[] = fs.existsSync(dir) ? fs.readdirSync(dir) : []
+        const userImgs = allFiles
+          .filter((f: string) => /^user[\-.].*\.(png|jpg|jpeg|bmp|webp)$/i.test(f))
+          .sort((a: string, b: string) => (parseInt(b.match(/(\d+)/)?.[1] ?? '0')) - (parseInt(a.match(/(\d+)/)?.[1] ?? '0')))
+        for (const f of userImgs) { avatar = readImg(path.join(dir, f)); if (avatar) break }
+      } catch { /**/ }
+    }
+
+    return { avatar, name }
+  })
+
+  // ── IPC: System actions ────────────────────────────────────────────────────
+
+  ipcMain.handle('system-action', (_e, action: string) => {
+    switch (action) {
+      case 'lock':       exec('rundll32.exe user32.dll,LockWorkStation',          { windowsHide: true }); break
+      case 'sleep':      exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0',  { windowsHide: true }); break
+      case 'restart':    exec('shutdown /r /t 0',                                 { windowsHide: true }); break
+      case 'shutdown':   exec('shutdown /s /t 0',                                 { windowsHide: true }); break
+      case 'screenshot': exec('explorer.exe ms-screenclip:',                      { windowsHide: true }); break
+      case 'settings':   exec('explorer.exe ms-settings:',                        { windowsHide: true }); break
+      case 'profile':    exec('explorer.exe ms-settings:yourinfo',                { windowsHide: true }); break
+    }
   })
 
   // ── Island hit-box + interaction interval ──────────────────────────────────

@@ -1,29 +1,31 @@
 /**
  * Drawer.tsx — Windows-style dark control panel
  *
- * Three pages (framer-motion fade):
- *   main  → volume slider + WiFi pill
+ * Four pages (framer-motion fade):
+ *   main  → avatar header + volume slider + WiFi pill
  *   sound → output devices + per-app volume mixer
  *   wifi  → full network list with toggle
+ *   power → sleep / restart / shut down
  *
  * State resets to "main" on every open.
  * All audio data comes from Python event-driven monitors (zero polling).
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Wifi, WifiHigh, WifiLow, WifiZero, GlobeOff,
   KeyRound, Volume2, Volume1, Volume, VolumeX, Check, RefreshCw,
   ChevronRight, ChevronLeft, Speaker, Headphones, MonitorSpeaker,
-  SlidersHorizontal,
+  SlidersHorizontal, Camera, Lock, Power, Settings, User,
+  Moon, RotateCcw, PowerOff,
 } from 'lucide-react'
 
 // ── Motion presets ────────────────────────────────────────────────────────────
 
 const SI = { type: 'spring', stiffness: 340, damping: 30, mass: 0.65 } as const
 
-const CARD_ENTER = { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.7 } }
+
 const CARD_EXIT = { opacity: 0, y: -8, transition: { duration: 0.15, ease: 'easeIn' } }
 
 const PAGE_IN = { opacity: 0, y: 6 }
@@ -36,7 +38,7 @@ function NetIcon({ n, size = 16, color = 'white' }: { n: NetworkState; size?: nu
   const p = { size, strokeWidth: 1.75, color }
   if (n.type === 'none') return <GlobeOff {...p} />
   const sig = n.signal
-  
+
   const getIcon = () => {
     if (sig === null || sig >= 75) return <Wifi     {...p} />
     if (sig >= 50) return <WifiHigh {...p} />
@@ -46,19 +48,15 @@ function NetIcon({ n, size = 16, color = 'white' }: { n: NetworkState; size?: nu
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <div className="absolute inset-0 opacity-25">
-        <Wifi {...p} />
-      </div>
-      <div className="absolute inset-0">
-        {getIcon()}
-      </div>
+      <div className="absolute inset-0 opacity-25"><Wifi {...p} /></div>
+      <div className="absolute inset-0">{getIcon()}</div>
     </div>
   )
 }
 
 function SigIcon({ signal, size = 14, color = 'white' }: { signal: number; size?: number; color?: string }) {
   const p = { size, strokeWidth: 1.75, color }
-  
+
   const getIcon = () => {
     if (signal >= 75) return <Wifi     {...p} />
     if (signal >= 50) return <WifiHigh {...p} />
@@ -68,12 +66,8 @@ function SigIcon({ signal, size = 14, color = 'white' }: { signal: number; size?
 
   return (
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <div className="absolute inset-0 opacity-25">
-        <Wifi {...p} />
-      </div>
-      <div className="absolute inset-0">
-        {getIcon()}
-      </div>
+      <div className="absolute inset-0 opacity-25"><Wifi {...p} /></div>
+      <div className="absolute inset-0">{getIcon()}</div>
     </div>
   )
 }
@@ -170,6 +164,80 @@ function PageHeader({ title, onBack, right }: {
   )
 }
 
+// ── Drawer header (avatar + quick-action icons) ───────────────────────────────
+
+function DrawerHeader({
+  avatar,
+  onAvatarClick,
+  onScreenshot,
+  onSettings,
+  onLock,
+  onPower,
+}: {
+  avatar: string | null
+  onAvatarClick(): void
+  onScreenshot(): void
+  onSettings(): void
+  onLock(): void
+  onPower(): void
+}) {
+  const btnCls = "w-[40px] h-[40px] rounded-full flex items-center justify-center shrink-0 cursor-pointer transition-colors duration-150"
+  const ic = { size: 17, strokeWidth: 2, color: 'rgba(255,255,255,0.72)' }
+
+  return (
+    <div className="flex items-center justify-between px-[14px] py-[11px] border-b border-white/[0.06]">
+      {/* Avatar */}
+      <button
+        onClick={onAvatarClick}
+        title="Your account"
+        className="w-[40px] h-[40px] rounded-full overflow-hidden bg-white/10 flex items-center justify-center shrink-0 cursor-pointer hover:ring-2 hover:ring-white/20 transition-all duration-150"
+        style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}
+      >
+        {avatar
+          ? <img src={avatar} className="w-full h-full object-cover" alt="User"
+              style={{ transform: 'translateZ(0)', backfaceVisibility: 'hidden' }} />
+          : <User size={19} strokeWidth={1.75} color="rgba(255,255,255,0.45)" />
+        }
+      </button>
+
+      {/* Right icon row */}
+      <div className="flex items-center gap-[7px]">
+        <button onClick={onScreenshot} title="Screenshot"
+          className={btnCls} style={{ background: 'rgba(255,255,255,0.10)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.10)')}
+          onMouseDown={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+          onMouseUp={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+        ><Camera {...ic} /></button>
+
+        <button onClick={onSettings} title="Settings"
+          className={btnCls} style={{ background: 'rgba(255,255,255,0.10)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.10)')}
+          onMouseDown={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+          onMouseUp={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+        ><Settings {...ic} /></button>
+
+        <button onClick={onLock} title="Lock screen"
+          className={btnCls} style={{ background: 'rgba(255,255,255,0.10)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.10)')}
+          onMouseDown={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+          onMouseUp={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+        ><Lock {...ic} /></button>
+
+        <button onClick={onPower} title="Power"
+          className={btnCls} style={{ background: 'rgba(255,255,255,0.10)' }}
+          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+          onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.10)')}
+          onMouseDown={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.07)')}
+          onMouseUp={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.16)')}
+        ><Power {...ic} /></button>
+      </div>
+    </div>
+  )
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE: Main
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,11 +309,7 @@ function MainPage({
         </button>
 
         <div className="flex-1">
-          <Slider
-            value={displayVol}
-            onChange={v => onVolumeChange(v)}
-            onCommit={onVolumeCommit}
-          />
+          <Slider value={displayVol} onChange={v => onVolumeChange(v)} onCommit={onVolumeCommit} />
         </div>
 
         <span className="text-[11px] text-white/50 w-[30px] text-right tabular-nums leading-none shrink-0">
@@ -292,12 +356,10 @@ function SoundPage({
 
       <div className="drawer-scroll flex flex-col p-[12px] gap-[2px]" style={{ maxHeight: 360, overflowY: 'auto' }}>
 
-        {/* Output device */}
         <p className="text-[10px] font-semibold text-white/35 uppercase tracking-widest px-[10px] py-[6px]">
           Output device
         </p>
 
-        {/* Loading skeleton — shown while device list is empty (first open) */}
         {devices.length === 0 && loading && (
           <div className="flex flex-col gap-[4px] px-[2px]">
             {[0, 1].map(i => (
@@ -311,7 +373,6 @@ function SoundPage({
           </div>
         )}
 
-        {/* Staggered device entries */}
         <AnimatePresence>
           {devices.map((d, i) => {
             const active = d.id === activeDeviceId
@@ -338,7 +399,6 @@ function SoundPage({
           })}
         </AnimatePresence>
 
-        {/* Volume mixer */}
         <div className="h-[0.5px] bg-white/[0.06] my-[6px]" />
 
         <p className="text-[10px] font-semibold text-white/35 uppercase tracking-widest px-[10px] py-[6px]">
@@ -365,7 +425,6 @@ function SoundPage({
           const displayVol = isMuted ? 0 : vol
           return (
             <div key={s.pid} className="flex items-center gap-[10px] pr-[14px] py-[6px]">
-              {/* App icon — mute/unmute button */}
               <button
                 onClick={() => onSessionMuteToggle(s.pid)}
                 title={isMuted ? 'Unmute' : 'Mute'}
@@ -526,14 +585,55 @@ function WifiPage({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PAGE: Power
+// ─────────────────────────────────────────────────────────────────────────────
+
+const POWER_ITEMS = [
+  { action: 'sleep',    Icon: Moon,     label: 'Sleep',     sub: 'Low power state'   },
+  { action: 'restart',  Icon: RotateCcw, label: 'Restart',  sub: 'Reboot Windows'    },
+  { action: 'shutdown', Icon: PowerOff, label: 'Shut down', sub: 'Turn off this PC'  },
+] as const
+
+function PowerPage({ onBack, onAction }: {
+  onBack(): void
+  onAction(action: 'sleep' | 'restart' | 'shutdown'): void
+}) {
+  return (
+    <div className="flex flex-col">
+      <PageHeader title="Power" onBack={onBack} />
+      <div className="flex flex-col gap-[2px] p-[10px]">
+        {POWER_ITEMS.map(({ action, Icon, label, sub }) => (
+          <button
+            key={action}
+            onClick={() => onAction(action)}
+            className="flex items-center gap-[12px] px-[10px] py-[11px] rounded-[12px]
+              hover:bg-white/7 active:bg-white/4 transition-colors cursor-pointer text-left group"
+          >
+            <div className="w-[36px] h-[36px] rounded-full bg-white/8 group-hover:bg-white/12
+              flex items-center justify-center shrink-0 transition-colors">
+              <Icon size={16} strokeWidth={1.75} color="rgba(255,255,255,0.7)" />
+            </div>
+            <div className="flex flex-col gap-[3px]">
+              <span className="text-[13px] font-medium text-white leading-none">{label}</span>
+              <span className="text-[11px] text-white/40 leading-none">{sub}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Root — manages all state + page navigation
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page = 'main' | 'sound' | 'wifi'
+type Page = 'main' | 'sound' | 'wifi' | 'power'
 
 export function Drawer() {
   const [visible, setVisible] = useState(false)
   const [page, setPage] = useState<Page>('main')
+  const [userInfo, setUserInfo] = useState<{ avatar: string | null }>({ avatar: null })
 
   // ── System state (event-driven from Python monitors) ──────────────────────
   const [network, setNetwork] = useState<NetworkState>({ type: 'none', signal: null, ssid: null, hasInternet: false, vpnActive: false })
@@ -557,7 +657,31 @@ export function Drawer() {
   const [loadingSessions, setLoadingSessions] = useState(false)
 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const scanningRef = useRef(false)   // mirror of `scanning` for interval callbacks
+  const scanningRef = useRef(false)
+
+  // ── Height animation via ResizeObserver + per-frame window sync ───────────
+  // We animate `height` explicitly (not layout FLIP) to avoid scaleY distortion
+  // with overflow-hidden. onUpdate syncs the window every animation frame so
+  // there is never a transparent dead zone blocking clicks.
+  const [targetH, setTargetH] = useState<number | null>(null)
+  const roRef = useRef<ResizeObserver | null>(null)
+
+  const setInnerRef = useCallback((el: HTMLDivElement | null) => {
+    roRef.current?.disconnect()
+    roRef.current = null
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const h = Math.round(entry.contentRect.height)
+      if (h > 0) setTargetH(h)
+    })
+    ro.observe(el)
+    roRef.current = ro
+  }, [])
+
+  const handleCardUpdate = useCallback((latest: Record<string, number | string>) => {
+    const h = latest.height
+    if (typeof h === 'number' && h > 0) window.island.setDrawerHeight(Math.ceil(h) + 8)
+  }, [])
 
   const refreshWifiState = useCallback(() => {
     window.island.getWifiState().then(s => setWifiEnabled(s.enabled)).catch(() => { })
@@ -565,7 +689,7 @@ export function Drawer() {
 
   // ── Close handler ─────────────────────────────────────────────────────────
   const closeDrawer = useCallback(() => {
-    if (closeTimer.current !== null) return   // already animating out
+    if (closeTimer.current !== null) return
     setVisible(false)
     closeTimer.current = setTimeout(() => {
       closeTimer.current = null
@@ -578,6 +702,7 @@ export function Drawer() {
     const unsubShow = window.island.onDrawerShow(() => {
       if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null }
       setPage('main')
+      setTargetH(null)
       setSessionVols({})
       setSessionMuted({})
       setSessionIcons({})
@@ -594,6 +719,8 @@ export function Drawer() {
     })
 
     refreshWifiState()
+
+    window.island.getUserInfo().then(info => setUserInfo({ avatar: info.avatar })).catch(() => { })
 
     const unsubStats = window.island.onSystemStats(s => {
       setNetwork(s.network)
@@ -624,7 +751,6 @@ export function Drawer() {
     }
   }
   const handleVolumeCommit = (v: number) => {
-    // Guarantee final value lands even if last throttle window was skipped
     window.island.setSystemVolume(v).catch(() => { })
   }
   const handleMuteToggle = () => {
@@ -645,21 +771,11 @@ export function Drawer() {
   }
 
   const handleScan = useCallback(async (force: boolean) => {
-    if (force) {
-      setScanning(true)
-      scanningRef.current = true
-    }
+    if (force) { setScanning(true); scanningRef.current = true }
     try { setNetworks(await window.island.scanWifiNetworks(force) ?? []) } catch { /**/ }
-    if (force) {
-      setScanning(false)
-      scanningRef.current = false
-    }
+    if (force) { setScanning(false); scanningRef.current = false }
   }, [])
 
-  // ── Periodic background rescan while WiFi page is open ───────────────────
-  // We need this because some WiFi adapters delay scanning the 5GHz band when
-  // actively connected to a 2.4GHz band. The soft scans will effortlessly catch
-  // the 5G network whenever Windows eventually discovers it in the background.
   useEffect(() => {
     if (page !== 'wifi') return
     const id = setInterval(() => {
@@ -671,13 +787,9 @@ export function Drawer() {
   }, [page, wifiEnabled, connectingSSID, handleScan, refreshWifiState])
 
   const handleConnect = async (ssid: string) => {
-    if (connectingSSID) return                      // already connecting
+    if (connectingSSID) return
     setConnectingSSID(ssid)
-    try {
-      await window.island.connectWifi(ssid)
-    } catch { /* best-effort */ }
-    // Wait for Windows to establish the link, then refresh the list so the
-    // newly connected network shows as connected automatically.
+    try { await window.island.connectWifi(ssid) } catch { /**/ }
     await new Promise<void>(res => setTimeout(res, 5000))
     setConnectingSSID(null)
     handleScan(false)
@@ -712,6 +824,17 @@ export function Drawer() {
     window.island.setSessionVolume(pid, undefined, next).catch(() => { })
   }
 
+  // ── System action handler ─────────────────────────────────────────────────
+  const handleSystemAction = (action: 'screenshot' | 'settings' | 'profile' | 'lock' | 'sleep' | 'restart' | 'shutdown') => {
+    if (action === 'screenshot') {
+      closeDrawer()
+      setTimeout(() => window.island.systemAction('screenshot').catch(() => { }), 230)
+      return
+    }
+    if (action !== 'settings') closeDrawer()
+    window.island.systemAction(action).catch(() => { })
+  }
+
   // ── Page navigation ───────────────────────────────────────────────────────
   const goTo = (p: Page) => {
     setPage(p)
@@ -725,7 +848,6 @@ export function Drawer() {
         .then(s => {
           setSessions(s)
           setLoadingSessions(false)
-          // Fetch per-app icons in parallel (best-effort)
           s.forEach(session => {
             window.island.getAppIcon(session.pid)
               .then(icon => setSessionIcons(prev => ({ ...prev, [session.pid]: icon })))
@@ -737,11 +859,7 @@ export function Drawer() {
 
     if (p === 'wifi') {
       refreshWifiState()
-      if (wifiEnabled) {
-        // Trigger ONE hard scan when the panel opens. This forces the OS to start
-        // a scan. The background interval (7s) will pick up the results shortly.
-        handleScan(true)
-      }
+      if (wifiEnabled) handleScan(true)
     }
   }
 
@@ -751,31 +869,36 @@ export function Drawer() {
   return (
     <div className="w-full h-full relative pointer-events-none select-none">
 
-
       <AnimatePresence>
         {visible && (
           <motion.div
             key="drawer-card"
-            layout
             className="drawer-card absolute top-[6px] right-[8px] w-[320px] pointer-events-auto overflow-hidden"
             initial={{ opacity: 0, y: -12 }}
-            animate={CARD_ENTER}
+            animate={{ opacity: 1, y: 0, ...(targetH !== null ? { height: targetH } : {}) }}
             exit={CARD_EXIT}
             onMouseDown={e => e.stopPropagation()}
-            style={{
-              background: '#000000',
-              borderRadius: '18px',
-            }}
-            transition={{ layout: { type: 'spring', stiffness: 380, damping: 34, mass: 0.75 } }}
+            onUpdate={handleCardUpdate}
+            style={{ background: '#000000', borderRadius: '18px' }}
+            transition={{ type: 'spring', stiffness: 380, damping: 34, mass: 0.75 }}
           >
             {/* Top inner sheen */}
             <div className="absolute top-0 left-0 right-0 h-[1px] rounded-t-[18px]
                 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none z-10" />
 
+            <div ref={setInnerRef}>
             <AnimatePresence mode="popLayout">
 
               {page === 'main' && (
                 <motion.div key="main" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
+                  <DrawerHeader
+                    avatar={userInfo.avatar}
+                    onAvatarClick={() => handleSystemAction('profile')}
+                    onScreenshot={() => handleSystemAction('screenshot')}
+                    onSettings={() => handleSystemAction('settings')}
+                    onLock={() => handleSystemAction('lock')}
+                    onPower={() => goTo('power')}
+                  />
                   <MainPage
                     volume={volume}
                     muted={muted}
@@ -828,7 +951,17 @@ export function Drawer() {
                 </motion.div>
               )}
 
+              {page === 'power' && (
+                <motion.div key="power" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
+                  <PowerPage
+                    onBack={goBack}
+                    onAction={action => handleSystemAction(action)}
+                  />
+                </motion.div>
+              )}
+
             </AnimatePresence>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -12,7 +12,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
-- **Interactive Control Drawer** — click the system tray icons to open a sleek, Framer Motion-animated control panel featuring a live WiFi network scanner and a real-time per-app audio mixer
+- **Interactive Control Drawer** — click the system tray icons to open a sleek, Framer Motion-animated control panel featuring a live WiFi network scanner and a real-time per-app audio mixer; click the avatar to jump directly to Windows Settings → Accounts
 - **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
 - **Live system tray icons** — WiFi (4 signal levels), no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all highly optimized using hybrid event-listeners and polling
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
@@ -278,6 +278,9 @@ App start
 | `set-ignore-mouse` | Renderer → Main | `boolean` |
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |
 | `set-hit-box` | Renderer → Main | `(w, h)` |
+| `get-user-info` | Renderer → Main (invoke) | — returns `{ avatar: string\|null, name: string }` |
+| `system-action` | Renderer → Main (invoke) | `action: 'lock'\|'sleep'\|'restart'\|'shutdown'\|'screenshot'\|'settings'\|'profile'` |
+| `drawer:resize` | Renderer → Main | `h: number` — sets drawer window height to match animated card |
 
 ---
 

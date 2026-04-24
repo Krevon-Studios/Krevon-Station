@@ -107,4 +107,11 @@ contextBridge.exposeInMainWorld('island', {
   setWifiEnabled:   (enable: boolean)    => ipcRenderer.invoke('set-wifi-enabled', enable),
   connectWifi:      (ssid: string)       => ipcRenderer.invoke('connect-wifi', ssid),
   getWifiState:     ()                   => ipcRenderer.invoke('get-wifi-state'),
+
+  // ── System actions ─────────────────────────────────────────────────────────
+  getUserInfo:     (): Promise<{ avatar: string | null; name: string }> => ipcRenderer.invoke('get-user-info'),
+  systemAction:    (action: string): Promise<void> => ipcRenderer.invoke('system-action', action),
+
+  // ── Drawer sizing ──────────────────────────────────────────────────────────
+  setDrawerHeight: (h: number): void             => ipcRenderer.send('drawer:resize', h),
 })
