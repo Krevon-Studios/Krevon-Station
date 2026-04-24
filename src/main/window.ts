@@ -120,7 +120,6 @@ export function createDrawerWindow(): BrowserWindow {
 
   win.setAlwaysOnTop(true, 'pop-up-menu')
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  win.once('ready-to-show', () => win.show())
 
   return win
 }

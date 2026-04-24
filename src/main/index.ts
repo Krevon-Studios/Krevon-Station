@@ -90,6 +90,7 @@ app.whenReady().then(() => {
     drawerOpen = true
     syncDrawerPosition()
     drawerWin.webContents.send('drawer:show', type)
+    drawerWin.show()
     drawerWin.focus()
   })
 
@@ -108,6 +109,7 @@ app.whenReady().then(() => {
   ipcMain.on('drawer:close', () => {
     drawerOpen = false
     taskbarWin.webContents.send('drawer:closed')
+    if (!drawerWin.isDestroyed()) drawerWin.hide()
   })
 
   // ── IPC: Volume — writes directly to Python process stdin ──────────────────
