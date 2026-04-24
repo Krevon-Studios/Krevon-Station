@@ -23,10 +23,10 @@ import {
 
 const SI = { type: 'spring', stiffness: 340, damping: 30, mass: 0.65 } as const
 
-const CARD_ENTER = { opacity: 1, y: 0,  transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.7 } }
-const CARD_EXIT  = { opacity: 0, y: -8, transition: { duration: 0.15, ease: 'easeIn' } }
+const CARD_ENTER = { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.7 } }
+const CARD_EXIT = { opacity: 0, y: -8, transition: { duration: 0.15, ease: 'easeIn' } }
 
-const PAGE_IN  = { opacity: 0 }
+const PAGE_IN = { opacity: 0 }
 const PAGE_MID = { opacity: 1, transition: { duration: 0.14, ease: 'easeOut' } }
 const PAGE_OUT = { opacity: 0, transition: { duration: 0.08, ease: 'easeIn' } }
 
@@ -37,9 +37,9 @@ function NetIcon({ n, size = 16, color = 'white' }: { n: NetworkState; size?: nu
   if (n.type === 'none' || !n.hasInternet) return <GlobeOff {...p} />
   const sig = n.signal
   if (sig === null || sig >= 75) return <Wifi     {...p} />
-  if (sig >= 50)                 return <WifiHigh {...p} />
-  if (sig >= 25)                 return <WifiLow  {...p} />
-  return                                <WifiZero {...p} />
+  if (sig >= 50) return <WifiHigh {...p} />
+  if (sig >= 25) return <WifiLow  {...p} />
+  return <WifiZero {...p} />
 }
 
 function SigIcon({ signal, size = 14, color = 'white' }: { signal: number; size?: number; color?: string }) {
@@ -47,7 +47,7 @@ function SigIcon({ signal, size = 14, color = 'white' }: { signal: number; size?
   if (signal >= 75) return <Wifi     {...p} />
   if (signal >= 50) return <WifiHigh {...p} />
   if (signal >= 25) return <WifiLow  {...p} />
-  return                   <WifiZero {...p} />
+  return <WifiZero {...p} />
 }
 
 function VolIcon({ volume, muted, size = 15, color = 'white' }: {
@@ -55,16 +55,16 @@ function VolIcon({ volume, muted, size = 15, color = 'white' }: {
 }) {
   const p = { size, strokeWidth: 1.75, color }
   if (muted || volume === 0) return <VolumeX {...p} />
-  if (volume <= 33)           return <Volume  {...p} />
-  if (volume <= 66)           return <Volume1 {...p} />
-  return                            <Volume2 {...p} />
+  if (volume <= 33) return <Volume  {...p} />
+  if (volume <= 66) return <Volume1 {...p} />
+  return <Volume2 {...p} />
 }
 
 function DevIcon({ name, size = 14, color = 'white' }: { name: string; size?: number; color?: string }) {
   const n = name.toLowerCase()
   const p = { size, strokeWidth: 1.75, color }
   if (n.includes('headphone') || n.includes('headset') || n.includes('earphone')) return <Headphones    {...p} />
-  if (n.includes('monitor')   || n.includes('display')  || n.includes('hdmi'))    return <MonitorSpeaker {...p} />
+  if (n.includes('monitor') || n.includes('display') || n.includes('hdmi')) return <MonitorSpeaker {...p} />
   return <Speaker {...p} />
 }
 
@@ -94,7 +94,7 @@ function Slider({ value, onChange, onCommit }: {
   onChange(v: number): void
   onCommit(v: number): void
 }) {
-  const ref      = useRef<HTMLDivElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const dragging = useRef(false)
 
   const clamp = (cx: number) => {
@@ -108,7 +108,7 @@ function Slider({ value, onChange, onCommit }: {
       className="relative h-[22px] flex items-center cursor-pointer group select-none"
       onPointerDown={e => { dragging.current = true; ref.current!.setPointerCapture(e.pointerId); onChange(clamp(e.clientX)) }}
       onPointerMove={e => { if (dragging.current) onChange(clamp(e.clientX)) }}
-      onPointerUp={e   => { if (!dragging.current) return; dragging.current = false; const v = clamp(e.clientX); onChange(v); onCommit(v) }}
+      onPointerUp={e => { if (!dragging.current) return; dragging.current = false; const v = clamp(e.clientX); onChange(v); onCommit(v) }}
     >
       <div className="w-full h-[5px] rounded-full bg-white/15">
         <div className="h-full rounded-full bg-[#3b82f6]/90" style={{ width: `${value}%` }} />
@@ -164,8 +164,8 @@ function MainPage({
   onGoWifi(): void
 }) {
   const displayVol = muted ? 0 : volume
-  const isActive   = wifiEnabled && network.type === 'wifi'
-  const connLabel  = network.ssid ?? (wifiEnabled ? 'Not connected' : 'Off')
+  const isActive = wifiEnabled && network.type === 'wifi'
+  const connLabel = network.ssid ?? (wifiEnabled ? 'Not connected' : 'Off')
 
   return (
     <div className="flex flex-col gap-[10px] p-[14px]">
@@ -245,12 +245,12 @@ function SoundPage({
   devices, activeDeviceId, sessions, sessionVolumes,
   loading, onBack, onPickDevice, onSessionChange, onSessionCommit,
 }: {
-  devices:       AudioDevice[]
+  devices: AudioDevice[]
   activeDeviceId: string
-  sessions:      AudioSession[]
+  sessions: AudioSession[]
   sessionVolumes: Record<number, number>
-  loading:       boolean
-  onBack():      void
+  loading: boolean
+  onBack(): void
   onPickDevice(id: string): void
   onSessionChange(pid: number, v: number): void
   onSessionCommit(pid: number, v: number): void
@@ -314,13 +314,13 @@ function SoundPage({
         {sessions.map(s => {
           const vol = sessionVolumes[s.pid] ?? s.volume
           return (
-            <div key={s.pid} className="flex items-center gap-[10px] px-[10px] py-[6px]">
+            <div key={s.pid} className="flex items-center gap-[10px] pr-[14px] py-[6px]">
               <div className="w-[28px] h-[28px] rounded-full bg-white/7 flex items-center justify-center shrink-0">
-                <Speaker size={13} color="rgba(255,255,255,0.45)" strokeWidth={1.75} />
+                <Speaker size={16} color="rgba(255,255,255,0.45)" strokeWidth={1.75} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-[5px]">
-                  <span className="text-[11px] text-white/55 leading-none truncate">{s.name}</span>
+                  <span className="text-[11px] text-white/55 leading-none truncate pb-[1px]">{s.name}</span>
                   <span className="text-[10px] text-white/35 ml-[6px] shrink-0 tabular-nums leading-none">{vol}%</span>
                 </div>
                 <Slider
@@ -345,14 +345,14 @@ function WifiPage({
   network, networks, scanning, wifiEnabled, wifiToggling,
   onBack, onWifiToggle, onScan, onConnect,
 }: {
-  network:      NetworkState
-  networks:     WifiNetwork[]
-  scanning:     boolean
-  wifiEnabled:  boolean
+  network: NetworkState
+  networks: WifiNetwork[]
+  scanning: boolean
+  wifiEnabled: boolean
   wifiToggling: boolean
-  onBack():     void
+  onBack(): void
   onWifiToggle(): void
-  onScan():     void
+  onScan(): void
   onConnect(ssid: string): void
 }) {
   return (
@@ -400,7 +400,7 @@ function WifiPage({
                   {isConn
                     ? <Check size={13} color="#60a5fa" strokeWidth={2.5} />
                     : <ChevronRight size={12} color="rgba(255,255,255,0.15)" strokeWidth={2}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      className="opacity-0 group-hover:opacity-100 transition-opacity" />
                   }
                 </motion.button>
               )
@@ -451,31 +451,31 @@ function WifiPage({
 type Page = 'main' | 'sound' | 'wifi'
 
 export function Drawer() {
-  const [visible, setVisible]   = useState(false)
-  const [page,    setPage]      = useState<Page>('main')
+  const [visible, setVisible] = useState(false)
+  const [page, setPage] = useState<Page>('main')
 
   // ── System state (event-driven from Python monitors) ──────────────────────
-  const [network,  setNetwork]  = useState<NetworkState>({ type: 'none', signal: null, ssid: null, hasInternet: false, vpnActive: false })
-  const [volume,   setVolume]   = useState(50)
-  const [muted,    setMuted]    = useState(false)
+  const [network, setNetwork] = useState<NetworkState>({ type: 'none', signal: null, ssid: null, hasInternet: false, vpnActive: false })
+  const [volume, setVolume] = useState(50)
+  const [muted, setMuted] = useState(false)
 
   // ── WiFi page state ───────────────────────────────────────────────────────
-  const [wifiEnabled,  setWifiEnabled]  = useState(false)
+  const [wifiEnabled, setWifiEnabled] = useState(false)
   const [wifiToggling, setWifiToggling] = useState(false)
-  const [networks,     setNetworks]     = useState<WifiNetwork[]>([])
-  const [scanning,     setScanning]     = useState(false)
+  const [networks, setNetworks] = useState<WifiNetwork[]>([])
+  const [scanning, setScanning] = useState(false)
 
   // ── Sound page state ──────────────────────────────────────────────────────
-  const [devices,        setDevices]       = useState<AudioDevice[]>([])
-  const [activeDeviceId, setActiveDevId]   = useState('')
-  const [sessions,       setSessions]      = useState<AudioSession[]>([])
-  const [sessionVols,    setSessionVols]   = useState<Record<number, number>>({})
+  const [devices, setDevices] = useState<AudioDevice[]>([])
+  const [activeDeviceId, setActiveDevId] = useState('')
+  const [sessions, setSessions] = useState<AudioSession[]>([])
+  const [sessionVols, setSessionVols] = useState<Record<number, number>>({})
   const [loadingSessions, setLoadingSessions] = useState(false)
 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const refreshWifiState = useCallback(() => {
-    window.island.getWifiState().then(s => setWifiEnabled(s.enabled)).catch(() => {})
+    window.island.getWifiState().then(s => setWifiEnabled(s.enabled)).catch(() => { })
   }, [])
 
   // ── Close handler ─────────────────────────────────────────────────────────
@@ -528,13 +528,13 @@ export function Drawer() {
   // ── Volume handlers ───────────────────────────────────────────────────────
   const handleVolumeChange = (v: number) => setVolume(v)
   const handleVolumeCommit = (v: number) => {
-    if (muted && v > 0) { setMuted(false); window.island.setSystemMute(false).catch(() => {}) }
-    window.island.setSystemVolume(v).catch(() => {})
+    if (muted && v > 0) { setMuted(false); window.island.setSystemMute(false).catch(() => { }) }
+    window.island.setSystemVolume(v).catch(() => { })
   }
   const handleMuteToggle = () => {
     const next = !muted
     setMuted(next)
-    window.island.setSystemMute(next).catch(() => {})
+    window.island.setSystemMute(next).catch(() => { })
   }
 
   // ── WiFi handlers ─────────────────────────────────────────────────────────
@@ -554,19 +554,19 @@ export function Drawer() {
     setScanning(false)
   }, [])
 
-  const handleConnect = (ssid: string) => window.island.connectWifi(ssid).catch(() => {})
+  const handleConnect = (ssid: string) => window.island.connectWifi(ssid).catch(() => { })
 
   // ── Sound handlers ────────────────────────────────────────────────────────
   const handlePickDevice = (id: string) => {
     setActiveDevId(id)
-    window.island.setAudioDevice(id).catch(() => {})
+    window.island.setAudioDevice(id).catch(() => { })
   }
 
   const handleSessionChange = (pid: number, v: number) =>
     setSessionVols(prev => ({ ...prev, [pid]: v }))
 
   const handleSessionCommit = (pid: number, v: number) =>
-    window.island.setSessionVolume(pid, v).catch(() => {})
+    window.island.setSessionVolume(pid, v).catch(() => { })
 
   // ── Page navigation ───────────────────────────────────────────────────────
   const goTo = (p: Page) => {
@@ -575,7 +575,7 @@ export function Drawer() {
     if (p === 'sound') {
       window.island.getAudioDevices()
         .then(r => { setDevices(r.devices); setActiveDevId(r.activeId) })
-        .catch(() => {})
+        .catch(() => { })
       setLoadingSessions(true)
       window.island.getAudioSessions()
         .then(s => { setSessions(s); setLoadingSessions(false) })
@@ -612,67 +612,67 @@ export function Drawer() {
             exit={CARD_EXIT}
             onMouseDown={e => e.stopPropagation()}
             style={{
-              background:   '#000000',
+              background: '#000000',
               borderRadius: '18px',
             }}
           >
-              {/* Top inner sheen */}
-              <div className="absolute top-0 left-0 right-0 h-[1px] rounded-t-[18px]
+            {/* Top inner sheen */}
+            <div className="absolute top-0 left-0 right-0 h-[1px] rounded-t-[18px]
                 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none z-10" />
 
-              <AnimatePresence mode="sync">
+            <AnimatePresence mode="sync">
 
-                {page === 'main' && (
-                  <motion.div key="main" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
-                    <MainPage
-                      volume={volume}
-                      muted={muted}
-                      network={network}
-                      wifiEnabled={wifiEnabled}
-                      wifiToggling={wifiToggling}
-                      onVolumeChange={handleVolumeChange}
-                      onVolumeCommit={handleVolumeCommit}
-                      onMuteToggle={handleMuteToggle}
-                      onWifiToggle={handleWifiToggle}
-                      onGoSound={() => goTo('sound')}
-                      onGoWifi={() => goTo('wifi')}
-                    />
-                  </motion.div>
-                )}
+              {page === 'main' && (
+                <motion.div key="main" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
+                  <MainPage
+                    volume={volume}
+                    muted={muted}
+                    network={network}
+                    wifiEnabled={wifiEnabled}
+                    wifiToggling={wifiToggling}
+                    onVolumeChange={handleVolumeChange}
+                    onVolumeCommit={handleVolumeCommit}
+                    onMuteToggle={handleMuteToggle}
+                    onWifiToggle={handleWifiToggle}
+                    onGoSound={() => goTo('sound')}
+                    onGoWifi={() => goTo('wifi')}
+                  />
+                </motion.div>
+              )}
 
-                {page === 'sound' && (
-                  <motion.div key="sound" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
-                    <SoundPage
-                      devices={devices}
-                      activeDeviceId={activeDeviceId}
-                      sessions={sessions}
-                      sessionVolumes={sessionVols}
-                      loading={loadingSessions}
-                      onBack={goBack}
-                      onPickDevice={handlePickDevice}
-                      onSessionChange={handleSessionChange}
-                      onSessionCommit={handleSessionCommit}
-                    />
-                  </motion.div>
-                )}
+              {page === 'sound' && (
+                <motion.div key="sound" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
+                  <SoundPage
+                    devices={devices}
+                    activeDeviceId={activeDeviceId}
+                    sessions={sessions}
+                    sessionVolumes={sessionVols}
+                    loading={loadingSessions}
+                    onBack={goBack}
+                    onPickDevice={handlePickDevice}
+                    onSessionChange={handleSessionChange}
+                    onSessionCommit={handleSessionCommit}
+                  />
+                </motion.div>
+              )}
 
-                {page === 'wifi' && (
-                  <motion.div key="wifi" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
-                    <WifiPage
-                      network={network}
-                      networks={networks}
-                      scanning={scanning}
-                      wifiEnabled={wifiEnabled}
-                      wifiToggling={wifiToggling}
-                      onBack={goBack}
-                      onWifiToggle={handleWifiToggle}
-                      onScan={handleScan}
-                      onConnect={handleConnect}
-                    />
-                  </motion.div>
-                )}
+              {page === 'wifi' && (
+                <motion.div key="wifi" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
+                  <WifiPage
+                    network={network}
+                    networks={networks}
+                    scanning={scanning}
+                    wifiEnabled={wifiEnabled}
+                    wifiToggling={wifiToggling}
+                    onBack={goBack}
+                    onWifiToggle={handleWifiToggle}
+                    onScan={handleScan}
+                    onConnect={handleConnect}
+                  />
+                </motion.div>
+              )}
 
-              </AnimatePresence>
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
