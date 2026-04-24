@@ -36,18 +36,46 @@ function NetIcon({ n, size = 16, color = 'white' }: { n: NetworkState; size?: nu
   const p = { size, strokeWidth: 1.75, color }
   if (n.type === 'none') return <GlobeOff {...p} />
   const sig = n.signal
-  if (sig === null || sig >= 75) return <Wifi     {...p} />
-  if (sig >= 50) return <WifiHigh {...p} />
-  if (sig >= 25) return <WifiLow  {...p} />
-  return <WifiZero {...p} />
+  
+  const getIcon = () => {
+    if (sig === null || sig >= 75) return <Wifi     {...p} />
+    if (sig >= 50) return <WifiHigh {...p} />
+    if (sig >= 25) return <WifiLow  {...p} />
+    return <WifiZero {...p} />
+  }
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <div className="absolute inset-0 opacity-25">
+        <Wifi {...p} />
+      </div>
+      <div className="absolute inset-0">
+        {getIcon()}
+      </div>
+    </div>
+  )
 }
 
 function SigIcon({ signal, size = 14, color = 'white' }: { signal: number; size?: number; color?: string }) {
   const p = { size, strokeWidth: 1.75, color }
-  if (signal >= 75) return <Wifi     {...p} />
-  if (signal >= 50) return <WifiHigh {...p} />
-  if (signal >= 25) return <WifiLow  {...p} />
-  return <WifiZero {...p} />
+  
+  const getIcon = () => {
+    if (signal >= 75) return <Wifi     {...p} />
+    if (signal >= 50) return <WifiHigh {...p} />
+    if (signal >= 25) return <WifiLow  {...p} />
+    return <WifiZero {...p} />
+  }
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <div className="absolute inset-0 opacity-25">
+        <Wifi {...p} />
+      </div>
+      <div className="absolute inset-0">
+        {getIcon()}
+      </div>
+    </div>
+  )
 }
 
 function VolIcon({ volume, muted, size = 15, color = 'white' }: {

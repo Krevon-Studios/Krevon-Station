@@ -7,32 +7,54 @@ import {
 
 function NetworkIcon({ network }: { network: NetworkState }) {
   const { type, signal } = network
-  const p = { size: 14, strokeWidth: 1.75 }
+  const p = { size: 16, strokeWidth: 2.25 }
   if (type === 'none') return <GlobeOff {...p} color="rgba(255,255,255,0.45)" />
-  if (signal === null || signal >= 75) return <Wifi     {...p} color="white" />
-  if (signal >= 50)                    return <WifiHigh {...p} color="white" />
-  if (signal >= 25)                    return <WifiLow  {...p} color="white" />
-  return                                      <WifiZero {...p} color="white" />
+
+  const getIcon = () => {
+    if (signal === null || signal >= 75) return <Wifi     {...p} color="white" />
+    if (signal >= 50) return <WifiHigh {...p} color="white" />
+    if (signal >= 25) return <WifiLow  {...p} color="white" />
+    return <WifiZero {...p} color="white" />
+  }
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: p.size, height: p.size }}>
+      <div className="absolute inset-0 flex items-center justify-center opacity-25">
+        <Wifi {...p} color="white" />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        {getIcon()}
+      </div>
+    </div>
+  )
 }
 
 function AudioIcon({ audio }: { audio: AudioState }) {
   const { volume, muted } = audio
-  const p = { size: 14, color: 'white', strokeWidth: 1.75 }
-  if (muted || volume === 0) return <VolumeX {...p} />
-  if (volume <= 33)          return <Volume  {...p} />
-  if (volume <= 66)          return <Volume1 {...p} />
-  return                            <Volume2 {...p} />
+  const p = { size: 16, color: 'white', strokeWidth: 2.25 }
+  const getIcon = () => {
+    if (muted || volume === 0) return <VolumeX {...p} />
+    if (volume <= 33) return <Volume  {...p} />
+    if (volume <= 66) return <Volume1 {...p} />
+    return <Volume2 {...p} />
+  }
+
+  return (
+    <div className="flex items-center justify-center" style={{ width: p.size, height: p.size }}>
+      {getIcon()}
+    </div>
+  )
 }
 
 const DEFAULT_NETWORK: NetworkState = { type: 'none', signal: null, ssid: null, hasInternet: false, vpnActive: false }
-const DEFAULT_AUDIO: AudioState     = { volume: 50, muted: false }
+const DEFAULT_AUDIO: AudioState = { volume: 50, muted: false }
 
 export function Taskbar() {
-  const [count,        setCount]        = useState(1)
-  const [activeIndex,  setActiveIndex]  = useState(0)
-  const [network,      setNetwork]      = useState<NetworkState>(DEFAULT_NETWORK)
-  const [audio,        setAudio]        = useState<AudioState>(DEFAULT_AUDIO)
-  const [drawerOpen,   setDrawerOpen]   = useState(false)
+  const [count, setCount] = useState(1)
+  const [activeIndex, setActiveIndex] = useState(0)
+  const [network, setNetwork] = useState<NetworkState>(DEFAULT_NETWORK)
+  const [audio, setAudio] = useState<AudioState>(DEFAULT_AUDIO)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Track last time the drawer was externally closed to debounce re-open
   const lastClosedAt = useRef(0)
@@ -53,7 +75,8 @@ export function Taskbar() {
     return () => { unsubDesktops(); unsubStats(); unsubClose() }
   }, [])
 
-  const toggleDrawer = () => {
+  const toggleDrawer = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation()
     // Debounce: if the drawer just closed (within 200ms) don't reopen
     if (drawerOpen || Date.now() - lastClosedAt.current < 200) {
       window.island.requestCloseDrawer()
@@ -64,10 +87,18 @@ export function Taskbar() {
     }
   }
 
+  const handleNavbarClick = () => {
+    if (drawerOpen) {
+      window.island.requestCloseDrawer()
+      setDrawerOpen(false)
+    }
+  }
+
   return (
     <div
       className="w-full h-[32px] bg-black flex items-center justify-between px-4 select-none"
       style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+      onClick={handleNavbarClick}
     >
       {/* Left: pagination dots */}
       <div className="flex items-center gap-[2px] h-full pl-2">
@@ -84,11 +115,10 @@ export function Taskbar() {
         onClick={toggleDrawer}
         aria-label="System controls"
         aria-expanded={drawerOpen}
-        className={`flex items-center gap-[10px] px-[10px] h-[24px] rounded-[8px] transition-all duration-150 cursor-pointer ${
-          drawerOpen ? 'bg-white/14 opacity-100' : 'opacity-80 hover:opacity-100 hover:bg-white/6'
-        }`}
+        className={`flex items-center gap-[10px] px-[10px] h-[24px] rounded-[8px] transition-all duration-150 cursor-pointer ${drawerOpen ? 'bg-white/14 opacity-100' : 'opacity-80 hover:opacity-100 hover:bg-white/6'
+          }`}
       >
-        {network.vpnActive && <KeyRound size={13} color="white" strokeWidth={1.75} />}
+        {network.vpnActive && <KeyRound size={15} color="white" strokeWidth={2.25} />}
         <NetworkIcon network={network} />
         <AudioIcon audio={audio} />
       </button>
