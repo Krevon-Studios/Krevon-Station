@@ -335,9 +335,10 @@ Unknown tools are title-cased from their snake_case name.
 - **Dynamic Hit Box** — renderer sends true intended dimensions (`set-hit-box`) to main process. Main polls `screen.getCursorScreenPoint()` at 16ms against this hit box. Taskbar area always interactive regardless of island state.
 - **Position** — flush with top-left of primary display (`x: 0, y: 0`)
 - **Pill shape** — top corners flush (`0px`), bottom corners rounded (`14px` idle, `22px` expanded)
-- **Always on top** — `setAlwaysOnTop(true, 'screen-saver')` hides behind fullscreen apps
+- **Always on top** — `setAlwaysOnTop(true, 'pop-up-menu')` hides behind fullscreen apps
 - **Non-focusable** — `focusable: false`; keyboard focus never stolen
 - **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled over island hover zone and taskbar
+- **Session Restore** — DWM drops hit-test caching for transparent, non-focusable windows after sleep, lock screens, or exiting exclusive fullscreen apps. The app forces DWM to rebuild the interactive region using a lazy, hover-triggered 1px bounds resize.
 - **Registered App Bar** — the taskbar window is registered with the Windows shell via `SHAppBarMessage` so the OS reserves the top 32px and all apps/maximised windows respect it as unusable space; the bar survives display-metrics changes
 
 ---

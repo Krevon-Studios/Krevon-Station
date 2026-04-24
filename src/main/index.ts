@@ -1,4 +1,4 @@
-import { app, ipcMain, screen } from 'electron'
+import { app, ipcMain, screen, powerMonitor } from 'electron'
 import { createIslandWindow, createTaskbarWindow, createDrawerWindow, TASKBAR_H } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
@@ -19,8 +19,8 @@ if (!app.requestSingleInstanceLock()) {
 
 app.whenReady().then(() => {
   const taskbarWin = createTaskbarWindow()
-  const islandWin  = createIslandWindow()
-  const drawerWin  = createDrawerWindow()
+  const islandWin = createIslandWindow()
+  const drawerWin = createDrawerWindow()
   let appBarRect = { left: 0, top: 0, right: 0, bottom: 32 }
   let taskbarShown = false
 
@@ -37,7 +37,7 @@ app.whenReady().then(() => {
       if (taskbarWin.isDestroyed() || islandWin.isDestroyed()) return
       if (isFullscreen) {
         taskbarWin.setOpacity(0); taskbarWin.setIgnoreMouseEvents(true, { forward: true })
-        islandWin.setOpacity(0);  islandWin.setIgnoreMouseEvents(true, { forward: true })
+        islandWin.setOpacity(0); islandWin.setIgnoreMouseEvents(true, { forward: true })
         if (!drawerWin.isDestroyed() && drawerOpen) {
           drawerOpen = false
           drawerWin.setIgnoreMouseEvents(true, { forward: true })
@@ -45,7 +45,9 @@ app.whenReady().then(() => {
         }
       } else {
         taskbarWin.setOpacity(1); islandWin.setOpacity(1)
+        islandWin.setAlwaysOnTop(true, 'pop-up-menu')
         interactActive = -1 as any; hoverActive = -1 as any; taskbarInteractActive = -1 as any
+        reassertWindows('fullscreen-exit')
       }
     }
   )
@@ -231,9 +233,9 @@ app.whenReady().then(() => {
   // ── IPC: User info (avatar + display name) ────────────────────────────────
 
   ipcMain.handle('get-user-info', async () => {
-    const fs   = require('fs')   as typeof import('fs')
+    const fs = require('fs') as typeof import('fs')
     const path = require('path') as typeof import('path')
-    const os   = require('os')   as typeof import('os')
+    const os = require('os') as typeof import('os')
 
     // Display name — FullName from local user, fallback to login name
     const name: string = await new Promise(resolve => {
@@ -247,11 +249,11 @@ app.whenReady().then(() => {
     const readImg = (p: string): string | null => {
       try {
         const data = fs.readFileSync(p)
-        const isPng  = data[0] === 0x89 && data[1] === 0x50
+        const isPng = data[0] === 0x89 && data[1] === 0x50
         const isJpeg = data[0] === 0xFF && data[1] === 0xD8
-        const isBmp  = data[0] === 0x42 && data[1] === 0x4D
+        const isBmp = data[0] === 0x42 && data[1] === 0x4D
         const isWebP = data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 &&
-                       data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50
+          data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50
         if (!isPng && !isJpeg && !isBmp && !isWebP) return null
         const mime = isPng ? 'png' : isJpeg ? 'jpeg' : isBmp ? 'bmp' : 'webp'
         return `data:image/${mime};base64,${data.toString('base64')}`
@@ -319,13 +321,13 @@ app.whenReady().then(() => {
 
   ipcMain.handle('system-action', (_e, action: string) => {
     switch (action) {
-      case 'lock':       exec('rundll32.exe user32.dll,LockWorkStation',          { windowsHide: true }); break
-      case 'sleep':      exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0',  { windowsHide: true }); break
-      case 'restart':    exec('shutdown /r /t 0',                                 { windowsHide: true }); break
-      case 'shutdown':   exec('shutdown /s /t 0',                                 { windowsHide: true }); break
-      case 'screenshot': exec('explorer.exe ms-screenclip:',                      { windowsHide: true }); break
-      case 'settings':   exec('explorer.exe ms-settings:',                        { windowsHide: true }); break
-      case 'profile':    exec('explorer.exe ms-settings:yourinfo',                { windowsHide: true }); break
+      case 'lock': exec('rundll32.exe user32.dll,LockWorkStation', { windowsHide: true }); break
+      case 'sleep': exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0', { windowsHide: true }); break
+      case 'restart': exec('shutdown /r /t 0', { windowsHide: true }); break
+      case 'shutdown': exec('shutdown /s /t 0', { windowsHide: true }); break
+      case 'screenshot': exec('explorer.exe ms-screenclip:', { windowsHide: true }); break
+      case 'settings': exec('explorer.exe ms-settings:', { windowsHide: true }); break
+      case 'profile': exec('explorer.exe ms-settings:yourinfo', { windowsHide: true }); break
     }
   })
 
@@ -339,21 +341,71 @@ app.whenReady().then(() => {
 
   ipcMain.on('set-hit-box', (_e, w: number, h: number) => { hitBox = { w, h } })
 
+  let taskbarNeedsReassert = false
+  let islandNeedsReassert  = false
+
   setInterval(() => {
     const { x, y } = screen.getCursorScreenPoint()
     const bounds = islandWin.getBounds()
     const centerX = bounds.x + bounds.width / 2
     const overIsland = x >= centerX - hitBox.w / 2 && x <= centerX + hitBox.w / 2 && y >= bounds.y && y <= bounds.y + hitBox.h
 
-    if (overIsland !== interactActive) { interactActive = overIsland; islandWin.setIgnoreMouseEvents(!overIsland, { forward: true }) }
-    if (overIsland !== hoverActive)    { hoverActive = overIsland;    islandWin.webContents.send('island:hover', overIsland) }
+    if (overIsland && islandNeedsReassert && !islandWin.isDestroyed()) {
+      islandNeedsReassert = false
+      const b = islandWin.getBounds()
+      islandWin.setBounds({ width: b.width + 1 })
+      islandWin.setBounds(b)
+    }
+
+    // Always force-set ignore state — no delta guard — self-heals after lock/unlock/fullscreen
+    islandWin.setIgnoreMouseEvents(!overIsland, { forward: true })
+    interactActive = overIsland
+    if (overIsland !== hoverActive) { hoverActive = overIsland; islandWin.webContents.send('island:hover', overIsland) }
 
     if (!taskbarWin.isDestroyed()) {
       const tb = taskbarWin.getBounds()
       const overTb = y >= tb.y && y <= tb.y + TASKBAR_H
-      if (overTb !== taskbarInteractActive) { taskbarInteractActive = overTb; taskbarWin.setIgnoreMouseEvents(!overTb, { forward: true }) }
+      if (overTb && taskbarNeedsReassert) {
+        taskbarNeedsReassert = false
+        taskbarWin.setBounds({ width: tb.width + 1 })
+        taskbarWin.setBounds(tb)
+      }
+
+      taskbarWin.setIgnoreMouseEvents(!overTb, { forward: true })
+      taskbarInteractActive = overTb
     }
   }, 16)
+
+  // After Windows lock/unlock/fullscreen, DWM caches hit-test bounds for transparent
+  // windows. We flag them here, and the poll loop will apply the 1px resize trick
+  // EXACTLY when the user first hovers over them. This ensures DWM is ready and
+  // reduces the visual jitter to a single frame that blends with hover animations.
+  function reassertWindows(tag?: string) {
+    taskbarNeedsReassert = true
+    islandNeedsReassert  = true
+
+    if (!taskbarWin.isDestroyed()) {
+      taskbarWin.setAlwaysOnTop(true, 'pop-up-menu')
+      taskbarWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      taskbarWin.setOpacity(1)
+    }
+
+    if (!islandWin.isDestroyed()) {
+      islandWin.setAlwaysOnTop(true, 'pop-up-menu')
+      islandWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      islandWin.moveTop()
+    }
+
+    interactActive = null as any
+    hoverActive = null as any
+    taskbarInteractActive = null as any
+  }
+
+  const onUnlock = () => reassertWindows('unlock')
+  const onResume = () => reassertWindows('resume')
+
+  powerMonitor.on('unlock-screen', onUnlock)
+  powerMonitor.on('resume', onResume)
 
   ipcMain.on('set-ignore-mouse', (_e, ignore: boolean) => islandWin.setIgnoreMouseEvents(ignore, { forward: true }))
   ipcMain.on('control-media', (_e, action: 'play-pause' | 'next' | 'prev', sourceAppId: string) => controlMedia(action, sourceAppId))
@@ -392,14 +444,16 @@ app.whenReady().then(() => {
     screen.off('display-metrics-changed', handleDisplayChange)
     screen.off('display-added', handleDisplayChange)
     screen.off('display-removed', handleDisplayChange)
+    powerMonitor.off('unlock-screen', onUnlock)
+    powerMonitor.off('resume', onResume)
     detachAppBar()
   }
 
   app.on('before-quit', cleanup); app.on('will-quit', cleanup)
   taskbarWin.on('closed', cleanup); islandWin.on('closed', cleanup)
-  process.once('SIGINT',  () => { cleanup(); process.exit(0) })
+  process.once('SIGINT', () => { cleanup(); process.exit(0) })
   process.once('SIGTERM', () => { cleanup(); process.exit(0) })
-  process.once('uncaughtException',  e => { console.error(e); cleanup(); process.exit(1) })
+  process.once('uncaughtException', e => { console.error(e); cleanup(); process.exit(1) })
   process.once('unhandledRejection', r => { console.error(r); cleanup(); process.exit(1) })
 })
 
