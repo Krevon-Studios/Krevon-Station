@@ -1,11 +1,11 @@
-﻿import { app, ipcMain, screen } from 'electron'
+import { app, ipcMain, screen } from 'electron'
 import { createIslandWindow, createTaskbarWindow, createDrawerWindow, TASKBAR_H } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
 import { createTray } from './tray'
 import { attachAppBar } from './appbar'
-import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume } from './system-stats'
+import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice } from './system-stats'
 import { spawn } from 'child_process'
 
 app.setName('Dynamic Island')
@@ -131,22 +131,7 @@ app.whenReady().then(() => {
 
   // ── IPC: Audio devices ─────────────────────────────────────────────────────
 
-  ipcMain.handle('get-audio-devices', async () => {
-    const out = await runPS(
-      `Get-PnpDevice -Class AudioEndpoint -Status OK 2>$null ` +
-      `| Where-Object { $_.FriendlyName -notmatch 'Microphone|Input|Capture|Headset Mic|Array' } ` +
-      `| Select-Object -ExpandProperty FriendlyName`
-    )
-    const names   = out.split('\n').map(l => l.trim()).filter(Boolean)
-    const devices = names.map((name, i) => ({ id: `dev-${i}`, name }))
-
-    const activeOut = await runPS(
-      `$type = [Type]::GetTypeFromCLSID([Guid]'BCDE0395-E52F-467C-8E3D-C4579291692E');\n` +
-      `if ($type) { $e = [Activator]::CreateInstance($type); ($e.GetDefaultAudioEndpoint(0,1)).FriendlyName } else { '' }`
-    )
-    const activeId = devices.find(d => activeOut.includes(d.name))?.id ?? (devices[0]?.id ?? '')
-    return { devices, activeId }
-  })
+  ipcMain.handle('get-audio-devices', () => requestAudioDevices())
 
   ipcMain.handle('get-audio-sessions', () => requestAudioSessions())
 
@@ -154,7 +139,9 @@ app.whenReady().then(() => {
     setSessionVolume(pid, volume, muted)
   })
 
-  ipcMain.handle('set-audio-device', async (_e, _deviceId: string) => { /* future */ })
+  ipcMain.handle('set-audio-device', (_e, deviceId: string) => {
+    setAudioDevice(deviceId)
+  })
 
   // ── IPC: App icon by PID (base64 PNG) ─────────────────────────────────────
   ipcMain.handle('get-app-icon', async (_e, pid: number) => {

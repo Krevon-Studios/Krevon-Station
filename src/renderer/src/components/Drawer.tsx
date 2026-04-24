@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Drawer.tsx — Windows-style dark control panel
  *
  * Three pages (framer-motion fade):
@@ -26,9 +26,9 @@ const SI = { type: 'spring', stiffness: 340, damping: 30, mass: 0.65 } as const
 const CARD_ENTER = { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.7 } }
 const CARD_EXIT = { opacity: 0, y: -8, transition: { duration: 0.15, ease: 'easeIn' } }
 
-const PAGE_IN = { opacity: 0 }
-const PAGE_MID = { opacity: 1, transition: { duration: 0.14, ease: 'easeOut' } }
-const PAGE_OUT = { opacity: 0, transition: { duration: 0.08, ease: 'easeIn' } }
+const PAGE_IN  = { opacity: 0, y: 6 }
+const PAGE_MID = { opacity: 1, y: 0, transition: { duration: 0.16, ease: [0.25, 0.1, 0.25, 1] } }
+const PAGE_OUT = { opacity: 0, y: -4, transition: { duration: 0.1, ease: 'easeIn' } }
 
 // ── Icon helpers ──────────────────────────────────────────────────────────────
 
@@ -170,38 +170,6 @@ function MainPage({
   return (
     <div className="flex flex-col gap-[10px] p-[14px]">
 
-      {/* ── Volume row ───────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-[8px]">
-        <button
-          onClick={onMuteToggle}
-          className="w-[32px] h-[32px] rounded-full bg-white/7 hover:bg-white/13 active:bg-white/5
-            flex items-center justify-center shrink-0 transition-colors cursor-pointer"
-        >
-          <VolIcon volume={volume} muted={muted} size={15} />
-        </button>
-
-        <div className="flex-1">
-          <Slider
-            value={displayVol}
-            onChange={v => onVolumeChange(v)}
-            onCommit={onVolumeCommit}
-          />
-        </div>
-
-        <span className="text-[11px] text-white/50 w-[30px] text-right tabular-nums leading-none shrink-0">
-          {displayVol}%
-        </span>
-
-        <button
-          onClick={onGoSound}
-          title="Sound settings"
-          className="w-[30px] h-[30px] rounded-full bg-white/7 hover:bg-white/13 active:bg-white/5
-            flex items-center justify-center shrink-0 transition-colors cursor-pointer"
-        >
-          <SlidersHorizontal size={13} color="rgba(255,255,255,0.55)" strokeWidth={1.75} />
-        </button>
-      </div>
-
       {/* ── WiFi pill ────────────────────────────────────────────────────── */}
       <div className={`flex rounded-[14px] overflow-hidden transition-colors duration-200
         ${isActive ? 'bg-[#3b82f6]/15' : 'bg-white/7'}`}
@@ -231,6 +199,38 @@ function MainPage({
           aria-label="Wi-Fi settings"
         >
           <ChevronRight size={14} color="rgba(255,255,255,0.5)" strokeWidth={2} />
+        </button>
+      </div>
+
+      {/* ── Volume row ───────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-[8px]">
+        <button
+          onClick={onMuteToggle}
+          className="w-[32px] h-[32px] rounded-full bg-white/7 hover:bg-white/13 active:bg-white/5
+            flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+        >
+          <VolIcon volume={volume} muted={muted} size={15} />
+        </button>
+
+        <div className="flex-1">
+          <Slider
+            value={displayVol}
+            onChange={v => onVolumeChange(v)}
+            onCommit={onVolumeCommit}
+          />
+        </div>
+
+        <span className="text-[11px] text-white/50 w-[30px] text-right tabular-nums leading-none shrink-0">
+          {displayVol}%
+        </span>
+
+        <button
+          onClick={onGoSound}
+          title="Sound settings"
+          className="w-[30px] h-[30px] rounded-full bg-white/7 hover:bg-white/13 active:bg-white/5
+            flex items-center justify-center shrink-0 transition-colors cursor-pointer"
+        >
+          <SlidersHorizontal size={13} color="rgba(255,255,255,0.55)" strokeWidth={1.75} />
         </button>
       </div>
     </div>
@@ -269,30 +269,46 @@ function SoundPage({
           Output device
         </p>
 
-        {devices.length === 0 && (
-          <p className="text-[11px] text-white/30 px-[10px] py-[8px]">No devices found</p>
+        {/* Loading skeleton — shown while device list is empty (first open) */}
+        {devices.length === 0 && loading && (
+          <div className="flex flex-col gap-[4px] px-[2px]">
+            {[0, 1].map(i => (
+              <div key={i} className="flex items-center gap-[10px] px-[10px] py-[9px] rounded-[12px]"
+                style={{ opacity: 0.35 - i * 0.1 }}>
+                <div className="w-[3px] h-[18px] rounded-full bg-white/10 shrink-0" />
+                <div className="w-[28px] h-[28px] rounded-full bg-white/8 shrink-0" />
+                <div className="h-[10px] rounded-full bg-white/8 flex-1" />
+              </div>
+            ))}
+          </div>
         )}
 
-        {devices.map(d => {
-          const active = d.id === activeDeviceId
-          return (
-            <button
-              key={d.id}
-              onClick={() => onPickDevice(d.id)}
-              className={`flex items-center gap-[10px] px-[10px] py-[9px] rounded-[12px] transition-colors cursor-pointer text-left
-                ${active ? 'bg-white/10' : 'hover:bg-white/6'}`}
-            >
-              <div className={`w-[3px] h-[18px] rounded-full shrink-0 transition-colors ${active ? 'bg-[#3b82f6]' : 'bg-transparent'}`} />
-              <div className="w-[28px] h-[28px] rounded-full bg-white/8 flex items-center justify-center shrink-0">
-                <DevIcon name={d.name} size={13} color={active ? 'white' : 'rgba(255,255,255,0.5)'} />
-              </div>
-              <span className={`flex-1 text-[12px] leading-none truncate ${active ? 'text-white font-medium' : 'text-white/65'}`}>
-                {d.name}
-              </span>
-              {active && <Check size={12} color="#60a5fa" strokeWidth={2.5} />}
-            </button>
-          )
-        })}
+        {/* Staggered device entries */}
+        <AnimatePresence>
+          {devices.map((d, i) => {
+            const active = d.id === activeDeviceId
+            return (
+              <motion.button
+                key={d.id}
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: 0.18, ease: 'easeOut', delay: i * 0.055 } }}
+                exit={{ opacity: 0, transition: { duration: 0.1 } }}
+                onClick={() => onPickDevice(d.id)}
+                className={`w-full flex items-center gap-[10px] px-[10px] py-[9px] rounded-[12px] transition-colors cursor-pointer text-left
+                  ${active ? 'bg-white/10' : 'hover:bg-white/6'}`}
+              >
+                <div className={`w-[3px] h-[18px] rounded-full shrink-0 transition-colors ${active ? 'bg-[#3b82f6]' : 'bg-transparent'}`} />
+                <div className="w-[28px] h-[28px] rounded-full bg-white/8 flex items-center justify-center shrink-0">
+                  <DevIcon name={d.name} size={13} color={active ? 'white' : 'rgba(255,255,255,0.5)'} />
+                </div>
+                <span className={`flex-1 text-[12px] leading-none truncate ${active ? 'text-white font-medium' : 'text-white/65'}`}>
+                  {d.name}
+                </span>
+                {active && <Check size={12} color="#60a5fa" strokeWidth={2.5} />}
+              </motion.button>
+            )
+          })}
+        </AnimatePresence>
 
         {/* Volume mixer */}
         <div className="h-[0.5px] bg-white/[0.06] my-[6px]" />
@@ -662,6 +678,7 @@ export function Drawer() {
         {visible && (
           <motion.div
             key="drawer-card"
+            layout
             className="drawer-card absolute top-[6px] right-[8px] w-[320px] pointer-events-auto overflow-hidden"
             initial={{ opacity: 0, y: -12 }}
             animate={CARD_ENTER}
@@ -671,12 +688,13 @@ export function Drawer() {
               background: '#000000',
               borderRadius: '18px',
             }}
+            transition={{ layout: { type: 'spring', stiffness: 380, damping: 34, mass: 0.75 } }}
           >
             {/* Top inner sheen */}
             <div className="absolute top-0 left-0 right-0 h-[1px] rounded-t-[18px]
                 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none z-10" />
 
-            <AnimatePresence mode="sync">
+            <AnimatePresence mode="popLayout">
 
               {page === 'main' && (
                 <motion.div key="main" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
