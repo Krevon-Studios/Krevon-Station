@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Drawer.tsx — Windows-style dark control panel
  *
  * Three pages (framer-motion fade):
@@ -183,7 +183,7 @@ function MainPage({
         <div className="flex-1">
           <Slider
             value={displayVol}
-            onChange={v => { onVolumeChange(v); if (muted && v > 0) onMuteToggle() }}
+            onChange={v => onVolumeChange(v)}
             onCommit={onVolumeCommit}
           />
         </div>
@@ -242,18 +242,21 @@ function MainPage({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SoundPage({
-  devices, activeDeviceId, sessions, sessionVolumes,
-  loading, onBack, onPickDevice, onSessionChange, onSessionCommit,
+  devices, activeDeviceId, sessions, sessionVolumes, sessionMuted, sessionIcons,
+  loading, onBack, onPickDevice, onSessionChange, onSessionCommit, onSessionMuteToggle,
 }: {
   devices: AudioDevice[]
   activeDeviceId: string
   sessions: AudioSession[]
   sessionVolumes: Record<number, number>
+  sessionMuted: Record<number, boolean>
+  sessionIcons: Record<number, string | null>
   loading: boolean
   onBack(): void
   onPickDevice(id: string): void
   onSessionChange(pid: number, v: number): void
   onSessionCommit(pid: number, v: number): void
+  onSessionMuteToggle(pid: number): void
 }) {
   return (
     <div className="flex flex-col">
@@ -313,19 +316,33 @@ function SoundPage({
 
         {sessions.map(s => {
           const vol = sessionVolumes[s.pid] ?? s.volume
+          const isMuted = sessionMuted[s.pid] ?? s.muted
+          const icon = sessionIcons[s.pid]
+          const displayVol = isMuted ? 0 : vol
           return (
             <div key={s.pid} className="flex items-center gap-[10px] pr-[14px] py-[6px]">
-              <div className="w-[28px] h-[28px] rounded-full bg-white/7 flex items-center justify-center shrink-0">
-                <Speaker size={16} color="rgba(255,255,255,0.45)" strokeWidth={1.75} />
-              </div>
+              {/* App icon — mute/unmute button */}
+              <button
+                onClick={() => onSessionMuteToggle(s.pid)}
+                title={isMuted ? 'Unmute' : 'Mute'}
+                className={`w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0
+                  transition-all duration-150 cursor-pointer
+                  ${isMuted ? 'bg-white/5 opacity-45' : 'bg-white/7 hover:bg-white/12 active:bg-white/5'}`}
+              >
+                {icon
+                  ? <img src={icon} className="w-[18px] h-[18px] object-contain rounded-[3px]"
+                      style={{ filter: isMuted ? 'grayscale(1)' : 'none' }} alt={s.name} />
+                  : <Speaker size={15} color={isMuted ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
+                }
+              </button>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-[5px]">
-                  <span className="text-[11px] text-white/55 leading-none truncate pb-[1px]">{s.name}</span>
-                  <span className="text-[10px] text-white/35 ml-[6px] shrink-0 tabular-nums leading-none">{vol}%</span>
+                  <span className={`text-[11px] leading-none truncate pb-[1px] ${isMuted ? 'text-white/30' : 'text-white/55'}`}>{s.name}</span>
+                  <span className="text-[10px] text-white/35 ml-[6px] shrink-0 tabular-nums leading-none">{displayVol}%</span>
                 </div>
                 <Slider
-                  value={vol}
-                  onChange={v => onSessionChange(s.pid, v)}
+                  value={displayVol}
+                  onChange={v => { if (isMuted && v > 0) onSessionMuteToggle(s.pid); onSessionChange(s.pid, v) }}
                   onCommit={v => onSessionCommit(s.pid, v)}
                 />
               </div>
@@ -470,6 +487,8 @@ export function Drawer() {
   const [activeDeviceId, setActiveDevId] = useState('')
   const [sessions, setSessions] = useState<AudioSession[]>([])
   const [sessionVols, setSessionVols] = useState<Record<number, number>>({})
+  const [sessionMuted, setSessionMuted] = useState<Record<number, boolean>>({})
+  const [sessionIcons, setSessionIcons] = useState<Record<number, string | null>>({})
   const [loadingSessions, setLoadingSessions] = useState(false)
 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -494,6 +513,8 @@ export function Drawer() {
       if (closeTimer.current) { clearTimeout(closeTimer.current); closeTimer.current = null }
       setPage('main')
       setSessionVols({})
+      setSessionMuted({})
+      setSessionIcons({})
       setVisible(true)
       refreshWifiState()
     })
@@ -526,9 +547,18 @@ export function Drawer() {
   }, [])
 
   // ── Volume handlers ───────────────────────────────────────────────────────
-  const handleVolumeChange = (v: number) => setVolume(v)
-  const handleVolumeCommit = (v: number) => {
+  const volumeThrottle = useRef<number>(0)
+  const handleVolumeChange = (v: number) => {
+    setVolume(v)
     if (muted && v > 0) { setMuted(false); window.island.setSystemMute(false).catch(() => { }) }
+    const now = Date.now()
+    if (now - volumeThrottle.current >= 16) {
+      volumeThrottle.current = now
+      window.island.setSystemVolume(v).catch(() => { })
+    }
+  }
+  const handleVolumeCommit = (v: number) => {
+    // Guarantee final value lands even if last throttle window was skipped
     window.island.setSystemVolume(v).catch(() => { })
   }
   const handleMuteToggle = () => {
@@ -562,11 +592,28 @@ export function Drawer() {
     window.island.setAudioDevice(id).catch(() => { })
   }
 
-  const handleSessionChange = (pid: number, v: number) =>
+  const sessionThrottles = useRef<Record<number, number>>({})
+
+  const handleSessionChange = (pid: number, v: number) => {
     setSessionVols(prev => ({ ...prev, [pid]: v }))
+    const now = Date.now()
+    const last = sessionThrottles.current[pid] ?? 0
+    if (now - last >= 16) {
+      sessionThrottles.current[pid] = now
+      window.island.setSessionVolume(pid, v).catch(() => { })
+    }
+  }
 
   const handleSessionCommit = (pid: number, v: number) =>
     window.island.setSessionVolume(pid, v).catch(() => { })
+
+  const handleSessionMuteToggle = (pid: number) => {
+    const session = sessions.find(s => s.pid === pid)
+    const current = sessionMuted[pid] ?? (session?.muted ?? false)
+    const next = !current
+    setSessionMuted(prev => ({ ...prev, [pid]: next }))
+    window.island.setSessionVolume(pid, undefined, next).catch(() => { })
+  }
 
   // ── Page navigation ───────────────────────────────────────────────────────
   const goTo = (p: Page) => {
@@ -578,7 +625,16 @@ export function Drawer() {
         .catch(() => { })
       setLoadingSessions(true)
       window.island.getAudioSessions()
-        .then(s => { setSessions(s); setLoadingSessions(false) })
+        .then(s => {
+          setSessions(s)
+          setLoadingSessions(false)
+          // Fetch per-app icons in parallel (best-effort)
+          s.forEach(session => {
+            window.island.getAppIcon(session.pid)
+              .then(icon => setSessionIcons(prev => ({ ...prev, [session.pid]: icon })))
+              .catch(() => { })
+          })
+        })
         .catch(() => { setLoadingSessions(false) })
     }
 
@@ -647,11 +703,14 @@ export function Drawer() {
                     activeDeviceId={activeDeviceId}
                     sessions={sessions}
                     sessionVolumes={sessionVols}
+                    sessionMuted={sessionMuted}
+                    sessionIcons={sessionIcons}
                     loading={loadingSessions}
                     onBack={goBack}
                     onPickDevice={handlePickDevice}
                     onSessionChange={handleSessionChange}
                     onSessionCommit={handleSessionCommit}
+                    onSessionMuteToggle={handleSessionMuteToggle}
                   />
                 </motion.div>
               )}

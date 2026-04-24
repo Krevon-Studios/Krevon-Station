@@ -1,4 +1,4 @@
-type NetworkType = 'wifi' | 'none'
+﻿type NetworkType = 'wifi' | 'none'
 
 interface NetworkState {
   type:        NetworkType
@@ -71,6 +71,7 @@ interface IslandAPI {
   getAudioSessions: () => Promise<AudioSession[]>
   setAudioDevice:   (deviceId: string)                              => Promise<void>
   setSessionVolume: (pid: number, volume?: number, muted?: boolean) => Promise<void>
+  getAppIcon:       (pid: number)                                    => Promise<string | null>
 
   // WiFi control
   scanWifiNetworks: ()                  => Promise<WifiNetwork[]>

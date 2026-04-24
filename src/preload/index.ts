@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+﻿import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('island', {
   onSessionStart: (cb: (data: unknown) => void) => {
@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('island', {
   getAudioSessions: ()                                                  => ipcRenderer.invoke('get-audio-sessions'),
   setAudioDevice:   (deviceId: string)                                  => ipcRenderer.invoke('set-audio-device', deviceId),
   setSessionVolume: (pid: number, volume?: number, muted?: boolean)     => ipcRenderer.invoke('set-session-volume', pid, volume, muted),
+  getAppIcon:       (pid: number)                                       => ipcRenderer.invoke('get-app-icon', pid),
 
   // ── WiFi control ───────────────────────────────────────────────────────────
   scanWifiNetworks: ()                   => ipcRenderer.invoke('scan-wifi-networks'),

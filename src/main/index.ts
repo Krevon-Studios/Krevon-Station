@@ -1,4 +1,4 @@
-import { app, ipcMain, screen } from 'electron'
+﻿import { app, ipcMain, screen } from 'electron'
 import { createIslandWindow, createTaskbarWindow, createDrawerWindow, TASKBAR_H } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
@@ -155,6 +155,28 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('set-audio-device', async (_e, _deviceId: string) => { /* future */ })
+
+  // ── IPC: App icon by PID (base64 PNG) ─────────────────────────────────────
+  ipcMain.handle('get-app-icon', async (_e, pid: number) => {
+    try {
+      const { exec } = await import('child_process')
+      const exePath: string = await new Promise((resolve) => {
+        exec(
+          `wmic process where ProcessId=${pid} get ExecutablePath /format:value`,
+          { windowsHide: true } as any,
+          (_err: Error | null, stdout: string) => {
+            const m = stdout.match(/ExecutablePath=(.+)/i)
+            resolve(m ? m[1].trim() : '')
+          }
+        )
+      })
+      if (!exePath) return null
+      const icon = await app.getFileIcon(exePath, { size: 'normal' })
+      return icon.toDataURL()            // "data:image/png;base64,..."
+    } catch {
+      return null
+    }
+  })
 
   // ── IPC: WiFi ─────────────────────────────────────────────────────────────
 
