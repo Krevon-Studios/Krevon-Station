@@ -1,5 +1,6 @@
-import { Island } from './components/Island'
+import { Island }  from './components/Island'
 import { Taskbar } from './components/Taskbar'
+import { Drawer }  from './components/Drawer'
 
 export default function App() {
   const view = new URLSearchParams(window.location.search).get('view') ?? 'island'
@@ -8,6 +9,14 @@ export default function App() {
     return (
       <div className="w-full h-full overflow-hidden flex flex-col relative">
         <Taskbar />
+      </div>
+    )
+  }
+
+  if (view === 'drawer') {
+    return (
+      <div className="w-full h-full overflow-hidden">
+        <Drawer />
       </div>
     )
   }
