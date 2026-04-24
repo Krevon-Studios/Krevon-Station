@@ -2,6 +2,8 @@ import { BrowserWindow, screen, nativeImage } from 'electron'
 import { join } from 'path'
 
 export const TASKBAR_H = 32
+export const DRAWER_W  = 260
+export const DRAWER_MAX_H = 480
 
 // Fixed window size — large enough for fully expanded state.
 // The pill itself shrinks/grows via CSS; we never resize the window on hover.
@@ -80,6 +82,42 @@ export function createIslandWindow(): BrowserWindow {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
   win.setIgnoreMouseEvents(true, { forward: true })
 
+  win.once('ready-to-show', () => win.show())
+
+  return win
+}
+
+export function createDrawerWindow(): BrowserWindow {
+  const { bounds } = buildBaseOptions()
+
+  const win = new BrowserWindow({
+    width:       bounds.width,
+    height:      bounds.height - TASKBAR_H,
+    x:           bounds.x,
+    y:           bounds.y + TASKBAR_H,
+    frame:       false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    skipTaskbar: true,
+    resizable:   false,
+    maximizable: false,
+    minimizable: false,
+    focusable:   false,   // transparent overlay — clicks pass through except on card
+    hasShadow:   false,
+    show:        false,
+    icon:        buildIcon(),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    }
+  })
+
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+  win.setIgnoreMouseEvents(true, { forward: true })
   win.once('ready-to-show', () => win.show())
 
   return win

@@ -51,6 +51,8 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.removeAllListeners('island:virtual-desktops')
     ipcRenderer.removeAllListeners('island:hover')
     ipcRenderer.removeAllListeners('system-stats')
+    ipcRenderer.removeAllListeners('drawer:show')
+    ipcRenderer.removeAllListeners('drawer:closed')
   },
 
   switchVirtualDesktop: (targetIndex: number) => ipcRenderer.send('switch-virtual-desktop', targetIndex),
@@ -65,5 +67,43 @@ contextBridge.exposeInMainWorld('island', {
 
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse', ignore),
   setWindowSize: (_w: number, _h: number) => {},
-  setHitBox: (w: number, h: number) => ipcRenderer.send('set-hit-box', w, h)
+  setHitBox: (w: number, h: number) => ipcRenderer.send('set-hit-box', w, h),
+
+  // ── Drawer control ─────────────────────────────────────────────────────────
+  openDrawer:          (type: string) => ipcRenderer.send('drawer:open', type),
+  closeDrawer:         ()             => ipcRenderer.send('drawer:close'),
+  requestCloseDrawer:  ()             => ipcRenderer.send('drawer:request-close'),
+
+  onDrawerShow: (cb: (type: string) => void) => {
+    const fn = (_e: any, type: string) => cb(type)
+    ipcRenderer.on('drawer:show', fn)
+    return () => ipcRenderer.removeListener('drawer:show', fn)
+  },
+
+  onDrawerClosed: (cb: () => void) => {
+    const fn = () => cb()
+    ipcRenderer.on('drawer:closed', fn)
+    return () => ipcRenderer.removeListener('drawer:closed', fn)
+  },
+
+  onDrawerForceClose: (cb: () => void) => {
+    const fn = () => cb()
+    ipcRenderer.on('drawer:force-close', fn)
+    return () => ipcRenderer.removeListener('drawer:force-close', fn)
+  },
+
+  // ── Audio control ──────────────────────────────────────────────────────────
+  setSystemVolume:  (volume: number)                                    => ipcRenderer.invoke('set-system-volume', volume),
+  setSystemMute:    (mute: boolean)                                     => ipcRenderer.invoke('set-system-mute', mute),
+  setAppVolume:     (pid: number, vol: number)                          => ipcRenderer.invoke('set-app-volume', pid, vol),
+  getAudioDevices:  ()                                                  => ipcRenderer.invoke('get-audio-devices'),
+  getAudioSessions: ()                                                  => ipcRenderer.invoke('get-audio-sessions'),
+  setAudioDevice:   (deviceId: string)                                  => ipcRenderer.invoke('set-audio-device', deviceId),
+  setSessionVolume: (pid: number, volume?: number, muted?: boolean)     => ipcRenderer.invoke('set-session-volume', pid, volume, muted),
+
+  // ── WiFi control ───────────────────────────────────────────────────────────
+  scanWifiNetworks: ()                   => ipcRenderer.invoke('scan-wifi-networks'),
+  setWifiEnabled:   (enable: boolean)    => ipcRenderer.invoke('set-wifi-enabled', enable),
+  connectWifi:      (ssid: string)       => ipcRenderer.invoke('connect-wifi', ssid),
+  getWifiState:     ()                   => ipcRenderer.invoke('get-wifi-state'),
 })

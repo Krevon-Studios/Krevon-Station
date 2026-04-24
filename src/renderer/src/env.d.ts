@@ -1,4 +1,4 @@
-type NetworkType = 'wifi' | 'ethernet' | 'none'
+type NetworkType = 'wifi' | 'none'
 
 interface NetworkState {
   type:        NetworkType
@@ -18,7 +18,27 @@ interface SystemStats {
   audio:   AudioState
 }
 
+interface WifiNetwork {
+  ssid:      string
+  signal:    number
+  secured:   boolean
+  connected: boolean
+}
+
+interface AudioDevice {
+  id:   string
+  name: string
+}
+
+interface AudioSession {
+  pid:    number
+  name:   string
+  volume: number
+  muted:  boolean
+}
+
 interface IslandAPI {
+  // Island events
   onSessionStart:     (cb: (data: unknown) => void) => () => void
   onToolActive:       (cb: (data: unknown) => void) => () => void
   onTaskDone:         (cb: (data: unknown) => void) => () => void
@@ -34,6 +54,29 @@ interface IslandAPI {
   setHitBox:          (w: number, h: number) => void
   getSystemStats:     () => Promise<SystemStats>
   onSystemStats:      (cb: (data: SystemStats) => void) => () => void
+
+  // Drawer control
+  openDrawer:         (type: string) => void
+  closeDrawer:        () => void
+  requestCloseDrawer: () => void
+  onDrawerShow:       (cb: (type: string) => void) => () => void
+  onDrawerClosed:     (cb: () => void) => () => void
+  onDrawerForceClose: (cb: () => void) => () => void
+
+  // Audio control
+  setSystemVolume:  (volume: number)                                => Promise<void>
+  setSystemMute:    (mute: boolean)                                 => Promise<void>
+  setAppVolume:     (pid: number, vol: number)                      => Promise<void>
+  getAudioDevices:  () => Promise<{ devices: AudioDevice[]; activeId: string }>
+  getAudioSessions: () => Promise<AudioSession[]>
+  setAudioDevice:   (deviceId: string)                              => Promise<void>
+  setSessionVolume: (pid: number, volume?: number, muted?: boolean) => Promise<void>
+
+  // WiFi control
+  scanWifiNetworks: ()                  => Promise<WifiNetwork[]>
+  setWifiEnabled:   (enable: boolean)   => Promise<void>
+  connectWifi:      (ssid: string)      => Promise<void>
+  getWifiState:     ()                  => Promise<{ enabled: boolean }>
 }
 
 declare interface Window {
