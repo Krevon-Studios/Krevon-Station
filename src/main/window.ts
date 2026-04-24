@@ -44,8 +44,8 @@ export function createTaskbarWindow(): BrowserWindow {
     }
   })
 
-  win.setAlwaysOnTop(true, 'screen-saver')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+  win.setAlwaysOnTop(true, 'pop-up-menu')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
   return win
 }
@@ -78,8 +78,8 @@ export function createIslandWindow(): BrowserWindow {
     }
   })
 
-  win.setAlwaysOnTop(true, 'screen-saver')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
+  win.setAlwaysOnTop(true, 'pop-up-menu')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setIgnoreMouseEvents(true, { forward: true })
 
   win.once('ready-to-show', () => win.show())
@@ -90,10 +90,13 @@ export function createIslandWindow(): BrowserWindow {
 export function createDrawerWindow(): BrowserWindow {
   const { bounds } = buildBaseOptions()
 
+  const W = 340
+  const H = 480
+
   const win = new BrowserWindow({
-    width:       bounds.width,
-    height:      bounds.height - TASKBAR_H,
-    x:           bounds.x,
+    width:       W,
+    height:      H,
+    x:           bounds.x + bounds.width - W,
     y:           bounds.y + TASKBAR_H,
     frame:       false,
     transparent: true,
@@ -103,7 +106,7 @@ export function createDrawerWindow(): BrowserWindow {
     resizable:   false,
     maximizable: false,
     minimizable: false,
-    focusable:   false,   // transparent overlay — clicks pass through except on card
+    focusable:   true,   // true to capture blur events
     hasShadow:   false,
     show:        false,
     icon:        buildIcon(),
@@ -115,9 +118,8 @@ export function createDrawerWindow(): BrowserWindow {
     }
   })
 
-  win.setAlwaysOnTop(true, 'screen-saver')
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false })
-  win.setIgnoreMouseEvents(true, { forward: true })
+  win.setAlwaysOnTop(true, 'pop-up-menu')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.once('ready-to-show', () => win.show())
 
   return win

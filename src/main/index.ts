@@ -74,7 +74,9 @@ app.whenReady().then(() => {
   function syncDrawerPosition() {
     if (drawerWin.isDestroyed()) return
     const { bounds } = screen.getPrimaryDisplay()
-    drawerWin.setBounds({ x: bounds.x, y: bounds.y + TASKBAR_H, width: bounds.width, height: bounds.height - TASKBAR_H })
+    const W = 340
+    const H = 480
+    drawerWin.setBounds({ x: bounds.x + bounds.width - W, y: bounds.y + TASKBAR_H, width: W, height: H })
   }
 
   // ── IPC: System stats ──────────────────────────────────────────────────────
@@ -88,7 +90,13 @@ app.whenReady().then(() => {
     drawerOpen = true
     syncDrawerPosition()
     drawerWin.webContents.send('drawer:show', type)
-    drawerWin.setIgnoreMouseEvents(false)
+    drawerWin.focus()
+  })
+
+  drawerWin.on('blur', () => {
+    if (drawerOpen && !drawerWin.isDestroyed()) {
+      drawerWin.webContents.send('drawer:force-close')
+    }
   })
 
   // Sent by taskbar/external callers — tells React to animate-close, which then sends drawer:close
@@ -99,7 +107,6 @@ app.whenReady().then(() => {
   // Sent by React after its close animation finishes
   ipcMain.on('drawer:close', () => {
     drawerOpen = false
-    if (!drawerWin.isDestroyed()) drawerWin.setIgnoreMouseEvents(true, { forward: true })
     taskbarWin.webContents.send('drawer:closed')
   })
 
@@ -230,11 +237,6 @@ app.whenReady().then(() => {
       const tb = taskbarWin.getBounds()
       const overTb = y >= tb.y && y <= tb.y + TASKBAR_H
       if (overTb !== taskbarInteractActive) { taskbarInteractActive = overTb; taskbarWin.setIgnoreMouseEvents(!overTb, { forward: true }) }
-    }
-
-    // Drawer: reinforce setIgnoreMouseEvents every tick — setBounds can reset Win32 state.
-    if (!drawerWin.isDestroyed()) {
-      if (drawerOpen) drawerWin.setIgnoreMouseEvents(false)
     }
   }, 16)
 

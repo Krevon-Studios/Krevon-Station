@@ -751,13 +751,6 @@ export function Drawer() {
   return (
     <div className="w-full h-full relative pointer-events-none select-none">
 
-      {/* Click-outside backdrop — outside AnimatePresence so it has no animation and no key issues */}
-      {visible && (
-        <div
-          className="absolute inset-0 pointer-events-auto"
-          onMouseDown={closeDrawer}
-        />
-      )}
 
       <AnimatePresence>
         {visible && (
