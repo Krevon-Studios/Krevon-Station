@@ -141,7 +141,7 @@ export function setAudioDevice(deviceId: string): void {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function scriptPath(name: string): string {
+export function scriptPath(name: string): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, name)
     : path.join(app.getAppPath(), 'src/main', name)

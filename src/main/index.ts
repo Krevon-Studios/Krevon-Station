@@ -5,7 +5,7 @@ import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
 import { createTray } from './tray'
 import { attachAppBar } from './appbar'
-import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice } from './system-stats'
+import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice, scriptPath } from './system-stats'
 import { spawn } from 'child_process'
 
 app.setName('Dynamic Island')
@@ -168,39 +168,28 @@ app.whenReady().then(() => {
   // ── IPC: WiFi ─────────────────────────────────────────────────────────────
 
   ipcMain.handle('scan-wifi-networks', async () => {
-    // No 2>$null — it expands $null in PS and mangles native cmd output
-    const out = await runPS(`netsh wlan show networks mode=bssid`)
-    const normalized = out.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-    const connected  = getCachedSystemStats().network.ssid ?? ''
-    const result: { ssid: string; signal: number; secured: boolean; connected: boolean }[] = []
-    const seen = new Set<string>()
-
-    // Find every "SSID N : <name>" header — variable whitespace
-    const ssidMatches = [...normalized.matchAll(/^SSID\s+\d+\s*:\s*(.+)$/gm)]
-
-    for (let i = 0; i < ssidMatches.length; i++) {
-      const ssid = ssidMatches[i][1].trim()
-      if (!ssid || seen.has(ssid)) continue
-
-      // Extract the block between this SSID header and the next one
-      const blockStart = ssidMatches[i].index!
-      const blockEnd   = ssidMatches[i + 1]?.index ?? normalized.length
-      const block      = normalized.slice(blockStart, blockEnd)
-
-      const sigM  = block.match(/Signal\s*:\s*(\d+)%/)
-      const authM = block.match(/Authentication\s*:\s*(.+)/)
-
-      const signal  = sigM  ? parseInt(sigM[1])  : 50
-      const auth    = authM ? authM[1].trim()     : 'WPA2-Personal'
-      const secured = !auth.toLowerCase().includes('open')
-
-      seen.add(ssid)
-      result.push({ ssid, signal, secured, connected: ssid === connected })
-    }
-
-    return result.sort((a, b) => {
-      if (a.connected !== b.connected) return a.connected ? -1 : 1
-      return b.signal - a.signal
+    // Run wifi-scan.py — uses Windows WLAN API (wlanapi.dll) directly via
+    // ctypes, the same path Windows Settings takes. It triggers WlanScan,
+    // waits for results, then returns a JSON array via stdout.
+    return new Promise<{ ssid: string; signal: number; secured: boolean; connected: boolean }[]>((resolve) => {
+      const script = scriptPath('wifi-scan.py')
+      const tryExe = (exe: string) => {
+        const proc = spawn(exe, [script], { windowsHide: true })
+        let stdout = ''
+        proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
+        proc.stderr.on('data', (d: Buffer) => {
+          const msg = d.toString().trim()
+          if (msg) console.error(`[wifi-scan:err] ${msg}`)
+        })
+        proc.on('close', () => {
+          try { resolve(JSON.parse(stdout.trim())) } catch { resolve([]) }
+        })
+        proc.on('error', () => {
+          if (exe === 'py') tryExe('python')
+          else resolve([])
+        })
+      }
+      tryExe('py')
     })
   })
 

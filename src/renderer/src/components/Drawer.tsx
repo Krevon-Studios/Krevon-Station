@@ -34,7 +34,7 @@ const PAGE_OUT = { opacity: 0, y: -4, transition: { duration: 0.1, ease: 'easeIn
 
 function NetIcon({ n, size = 16, color = 'white' }: { n: NetworkState; size?: number; color?: string }) {
   const p = { size, strokeWidth: 1.75, color }
-  if (n.type === 'none' || !n.hasInternet) return <GlobeOff {...p} />
+  if (n.type === 'none') return <GlobeOff {...p} />
   const sig = n.signal
   if (sig === null || sig >= 75) return <Wifi     {...p} />
   if (sig >= 50) return <WifiHigh {...p} />
@@ -656,7 +656,9 @@ export function Drawer() {
 
     if (p === 'wifi') {
       refreshWifiState()
-      if (networks.length === 0 && wifiEnabled) handleScan()
+      // Always rescan on open — the backend now triggers a real Windows
+      // active scan (netsh wlan scan) so results are always fresh.
+      if (wifiEnabled) handleScan()
     }
   }
 

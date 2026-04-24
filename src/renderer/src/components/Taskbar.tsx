@@ -6,13 +6,13 @@ import {
 } from 'lucide-react'
 
 function NetworkIcon({ network }: { network: NetworkState }) {
-  const { type, signal, hasInternet } = network
-  const p = { size: 14, color: 'white', strokeWidth: 1.75 }
-  if (type === 'none' || !hasInternet) return <GlobeOff {...p} />
-  if (signal === null || signal >= 75) return <Wifi     {...p} />
-  if (signal >= 50)                    return <WifiHigh {...p} />
-  if (signal >= 25)                    return <WifiLow  {...p} />
-  return                                      <WifiZero {...p} />
+  const { type, signal } = network
+  const p = { size: 14, strokeWidth: 1.75 }
+  if (type === 'none') return <GlobeOff {...p} color="rgba(255,255,255,0.45)" />
+  if (signal === null || signal >= 75) return <Wifi     {...p} color="white" />
+  if (signal >= 50)                    return <WifiHigh {...p} color="white" />
+  if (signal >= 25)                    return <WifiLow  {...p} color="white" />
+  return                                      <WifiZero {...p} color="white" />
 }
 
 function AudioIcon({ audio }: { audio: AudioState }) {
