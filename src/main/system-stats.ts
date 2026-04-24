@@ -20,7 +20,7 @@ import type { BrowserWindow } from 'electron'
 // Shared types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type NetworkType = 'wifi' | 'ethernet' | 'none'
+export type NetworkType = 'wifi' | 'none'
 
 export interface NetworkState {
   type: NetworkType

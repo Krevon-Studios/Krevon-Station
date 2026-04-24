@@ -26,7 +26,7 @@ const SI = { type: 'spring', stiffness: 340, damping: 30, mass: 0.65 } as const
 const CARD_ENTER = { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.7 } }
 const CARD_EXIT = { opacity: 0, y: -8, transition: { duration: 0.15, ease: 'easeIn' } }
 
-const PAGE_IN  = { opacity: 0, y: 6 }
+const PAGE_IN = { opacity: 0, y: 6 }
 const PAGE_MID = { opacity: 1, y: 0, transition: { duration: 0.16, ease: [0.25, 0.1, 0.25, 1] } }
 const PAGE_OUT = { opacity: 0, y: -4, transition: { duration: 0.1, ease: 'easeIn' } }
 
@@ -347,7 +347,7 @@ function SoundPage({
               >
                 {icon
                   ? <img src={icon} className="w-[18px] h-[18px] object-contain rounded-[3px]"
-                      style={{ filter: isMuted ? 'grayscale(1)' : 'none' }} alt={s.name} />
+                    style={{ filter: isMuted ? 'grayscale(1)' : 'none' }} alt={s.name} />
                   : <Speaker size={15} color={isMuted ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.5)'} strokeWidth={1.75} />
                 }
               </button>
@@ -375,7 +375,7 @@ function SoundPage({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function WifiPage({
-  network, networks, scanning, wifiEnabled, wifiToggling,
+  network, networks, scanning, wifiEnabled, wifiToggling, connectingSSID,
   onBack, onWifiToggle, onScan, onConnect,
 }: {
   network: NetworkState
@@ -383,9 +383,10 @@ function WifiPage({
   scanning: boolean
   wifiEnabled: boolean
   wifiToggling: boolean
+  connectingSSID: string | null
   onBack(): void
   onWifiToggle(): void
-  onScan(): void
+  onScan(force: boolean): void
   onConnect(ssid: string): void
 }) {
   return (
@@ -401,43 +402,62 @@ function WifiPage({
           <p className="text-[11px] text-white/30 text-center py-[24px]">Wi-Fi is turned off</p>
         ) : (
           <>
-            {networks.map((n, i) => {
-              const isConn = n.connected
-              return (
-                <motion.button
-                  key={n.ssid}
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0, transition: { ...SI, delay: 0.025 * i } }}
-                  onClick={() => !isConn && onConnect(n.ssid)}
-                  className={`flex items-center gap-[10px] px-[10px] py-[10px] rounded-[12px] transition-colors cursor-pointer text-left group
-                    ${isConn ? 'bg-[#3b82f6]/13' : 'hover:bg-white/6'}`}
-                >
-                  <div className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0
-                    ${isConn ? 'bg-[#3b82f6]/25' : 'bg-white/8'}`}
+            <AnimatePresence initial={false}>
+              {networks.map((n, i) => {
+                const isConn = n.connected
+                const isConnecting = connectingSSID === n.ssid
+                const busyOther = connectingSSID !== null && !isConnecting && !isConn
+                return (
+                  <motion.button
+                    layout="position"
+                    key={n.ssid}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1, transition: { ...SI } }}
+                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.1 } }}
+                    onClick={() => !isConn && !connectingSSID && onConnect(n.ssid)}
+                    disabled={busyOther}
+                    className={`flex items-center gap-[10px] px-[10px] py-[10px] rounded-[12px] transition-colors cursor-pointer text-left group
+                    ${isConn ? 'bg-[#3b82f6]/13' : isConnecting ? 'bg-white/8' : 'hover:bg-white/6'}
+                    ${busyOther ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
-                    <SigIcon signal={n.signal} size={14} color={isConn ? '#93c5fd' : 'rgba(255,255,255,0.6)'} />
-                  </div>
-                  <div className="flex flex-col gap-[2px] flex-1 min-w-0">
-                    <span className={`text-[13px] font-medium leading-none truncate ${isConn ? 'text-white' : 'text-white/80'}`}>
-                      {n.ssid}
-                    </span>
-                    {isConn && (
-                      <span className="text-[11px] text-white/40 leading-none">
-                        Connected{n.secured ? ', secured' : ''}
+                    <div className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0
+                    ${isConn ? 'bg-[#3b82f6]/25' : isConnecting ? 'bg-white/12' : 'bg-white/8'}`}
+                    >
+                      {isConnecting
+                        ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}>
+                          <RefreshCw size={14} color="rgba(255,255,255,0.7)" strokeWidth={2} />
+                        </motion.div>
+                        : <SigIcon signal={n.signal} size={14} color={isConn ? '#93c5fd' : 'rgba(255,255,255,0.6)'} />
+                      }
+                    </div>
+                    <div className="flex flex-col gap-[2px] flex-1 min-w-0">
+                      <span className={`text-[13px] font-medium leading-none truncate
+                      ${isConn ? 'text-white' : isConnecting ? 'text-white/90' : 'text-white/80'}`}>
+                        {n.ssid}
                       </span>
+                      {isConn && (
+                        <span className="text-[11px] text-white/40 leading-none">
+                          Connected{n.secured ? ', secured' : ''}
+                        </span>
+                      )}
+                      {isConnecting && (
+                        <span className="text-[11px] text-white/40 leading-none">Connecting…</span>
+                      )}
+                    </div>
+                    {n.secured && !isConn && !isConnecting && (
+                      <KeyRound size={11} color="rgba(255,255,255,0.25)" strokeWidth={2} />
                     )}
-                  </div>
-                  {n.secured && !isConn && (
-                    <KeyRound size={11} color="rgba(255,255,255,0.25)" strokeWidth={2} />
-                  )}
-                  {isConn
-                    ? <Check size={13} color="#60a5fa" strokeWidth={2.5} />
-                    : <ChevronRight size={12} color="rgba(255,255,255,0.15)" strokeWidth={2}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                  }
-                </motion.button>
-              )
-            })}
+                    {isConn
+                      ? <Check size={13} color="#60a5fa" strokeWidth={2.5} />
+                      : isConnecting
+                        ? null
+                        : <ChevronRight size={12} color="rgba(255,255,255,0.15)" strokeWidth={2}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                    }
+                  </motion.button>
+                )
+              })}
+            </AnimatePresence>
 
             {networks.length === 0 && !scanning && (
               <p className="text-[11px] text-white/25 text-center py-[20px]">No networks found</p>
@@ -458,7 +478,7 @@ function WifiPage({
       {wifiEnabled && (
         <div className="flex items-center justify-end gap-[6px] px-[14px] py-[9px] border-t border-white/[0.06]">
           <button
-            onClick={onScan}
+            onClick={() => onScan(true)}
             disabled={scanning}
             className="flex items-center gap-[6px] px-[10px] py-[5px] rounded-[8px]
               hover:bg-white/7 active:bg-white/4 transition-colors cursor-pointer disabled:opacity-40"
@@ -497,6 +517,7 @@ export function Drawer() {
   const [wifiToggling, setWifiToggling] = useState(false)
   const [networks, setNetworks] = useState<WifiNetwork[]>([])
   const [scanning, setScanning] = useState(false)
+  const [connectingSSID, setConnectingSSID] = useState<string | null>(null)
 
   // ── Sound page state ──────────────────────────────────────────────────────
   const [devices, setDevices] = useState<AudioDevice[]>([])
@@ -508,6 +529,7 @@ export function Drawer() {
   const [loadingSessions, setLoadingSessions] = useState(false)
 
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scanningRef = useRef(false)   // mirror of `scanning` for interval callbacks
 
   const refreshWifiState = useCallback(() => {
     window.island.getWifiState().then(s => setWifiEnabled(s.enabled)).catch(() => { })
@@ -591,16 +613,47 @@ export function Drawer() {
     setWifiEnabled(next)
     try { await window.island.setWifiEnabled(next) } catch { setWifiEnabled(!next) }
     setWifiToggling(false)
-    if (next) handleScan()
+    if (next) handleScan(false)
   }
 
-  const handleScan = useCallback(async () => {
-    setScanning(true)
-    try { setNetworks(await window.island.scanWifiNetworks() ?? []) } catch { /**/ }
-    setScanning(false)
+  const handleScan = useCallback(async (force: boolean) => {
+    if (force) {
+      setScanning(true)
+      scanningRef.current = true
+    }
+    try { setNetworks(await window.island.scanWifiNetworks(force) ?? []) } catch { /**/ }
+    if (force) {
+      setScanning(false)
+      scanningRef.current = false
+    }
   }, [])
 
-  const handleConnect = (ssid: string) => window.island.connectWifi(ssid).catch(() => { })
+  // ── Periodic background rescan while WiFi page is open ───────────────────
+  // We need this because some WiFi adapters delay scanning the 5GHz band when
+  // actively connected to a 2.4GHz band. The soft scans will effortlessly catch
+  // the 5G network whenever Windows eventually discovers it in the background.
+  useEffect(() => {
+    if (page !== 'wifi') return
+    const id = setInterval(() => {
+      refreshWifiState()
+      if (!wifiEnabled || scanningRef.current || connectingSSID) return
+      handleScan(false)
+    }, 7_000)
+    return () => clearInterval(id)
+  }, [page, wifiEnabled, connectingSSID, handleScan, refreshWifiState])
+
+  const handleConnect = async (ssid: string) => {
+    if (connectingSSID) return                      // already connecting
+    setConnectingSSID(ssid)
+    try {
+      await window.island.connectWifi(ssid)
+    } catch { /* best-effort */ }
+    // Wait for Windows to establish the link, then refresh the list so the
+    // newly connected network shows as connected automatically.
+    await new Promise<void>(res => setTimeout(res, 5000))
+    setConnectingSSID(null)
+    handleScan(false)
+  }
 
   // ── Sound handlers ────────────────────────────────────────────────────────
   const handlePickDevice = (id: string) => {
@@ -656,9 +709,11 @@ export function Drawer() {
 
     if (p === 'wifi') {
       refreshWifiState()
-      // Always rescan on open — the backend now triggers a real Windows
-      // active scan (netsh wlan scan) so results are always fresh.
-      if (wifiEnabled) handleScan()
+      if (wifiEnabled) {
+        // Trigger ONE hard scan when the panel opens. This forces the OS to start
+        // a scan. The background interval (7s) will pick up the results shortly.
+        handleScan(true)
+      }
     }
   }
 
@@ -743,6 +798,7 @@ export function Drawer() {
                     scanning={scanning}
                     wifiEnabled={wifiEnabled}
                     wifiToggling={wifiToggling}
+                    connectingSSID={connectingSSID}
                     onBack={goBack}
                     onWifiToggle={handleWifiToggle}
                     onScan={handleScan}

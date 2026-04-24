@@ -12,8 +12,9 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
+- **Interactive Control Drawer** — click the system tray icons to open a sleek, Framer Motion-animated control panel featuring a live WiFi network scanner and a real-time per-app audio mixer
 - **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
-- **Live system tray icons** — WiFi (4 signal levels), Ethernet, no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all event-driven with zero polling
+- **Live system tray icons** — WiFi (4 signal levels), no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all highly optimized using hybrid event-listeners and polling
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
 - **Dynamic resize** — pill expands/contracts smoothly per state
 - **Always on top** — hides behind fullscreen apps automatically
@@ -32,7 +33,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 | Package manager | Bun |
 | Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
 | Hook server | Express on `127.0.0.1:7823` |
-| System stats | Python 3 + `pycaw` + `psutil` (event-driven, zero polling) |
+| System stats | Python 3 + `pycaw` + `psutil` + `wlanapi.dll` (hybrid event-driven architecture) |
 
 ---
 
@@ -65,7 +66,9 @@ src/
 │   ├── switch-desktop.ps1    # PowerShell — persistent stdin loop, calls native helper, falls back to hotkeys
 │   ├── system-stats.ts       # Spawns Python monitors, broadcasts system-stats IPC
 │   ├── audio-monitor.py      # Python — IAudioEndpointVolumeCallback COM callback (zero polling)
-│   ├── network-monitor.py    # Python — NotifyAddrChange blocking call + netsh/psutil (zero polling)
+│   ├── network-monitor.py    # Python — Hybrid: NotifyAddrChange + polling for signal strength
+│   ├── wifi-scan.py          # Python — Native wlanapi.dll async network scanner
+│   ├── wifi-toggle.py        # Python — Native wlanapi.dll radio toggle (no admin required)
 │   ├── vendor/
 │   │   ├── VirtualDesktopHelper.exe
 │   │   ├── VirtualDesktopHelper.source.cs
@@ -78,7 +81,8 @@ src/
     ├── env.d.ts              # window.island API types (incl. SystemStats)
     ├── components/
     │   ├── Island.tsx        # All state UIs + media controls
-    │   └── Taskbar.tsx       # Full-width top bar — desktop dots + live system icons
+    │   ├── Taskbar.tsx       # Full-width top bar — desktop dots + live system icons
+    │   └── Drawer.tsx        # Framer Motion animated WiFi & Audio control panel
     └── store/
         └── useIslandStore.ts # State machine + window resize logic
 ```
@@ -263,6 +267,13 @@ App start
 | `system-stats` | Main → Renderer | `{ network: NetworkState, audio: AudioState }` |
 | `get-virtual-desktops` | Renderer → Main (invoke) | — returns `{ count, activeIndex }` |
 | `get-system-stats` | Renderer → Main (invoke) | — returns current `SystemStats` snapshot |
+| `scan-wifi-networks` | Renderer → Main (invoke) | — returns `WifiNetwork[]` |
+| `get-wifi-state` | Renderer → Main (invoke) | — returns `{ enabled: boolean }` |
+| `set-wifi-enabled` | Renderer → Main (invoke) | `enable: boolean` |
+| `connect-wifi` | Renderer → Main (invoke) | `ssid: string` |
+| `request-audio-sessions` | Renderer → Main (invoke) | — returns `AudioSessionInfo[]` |
+| `set-session-volume` | Renderer → Main | `(pid, volume, muted)` |
+| `set-audio-device` | Renderer → Main | `deviceId: string` |
 | `switch-virtual-desktop` | Renderer → Main | `targetIndex: number` |
 | `set-ignore-mouse` | Renderer → Main | `boolean` |
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |

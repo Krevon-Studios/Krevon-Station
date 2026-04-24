@@ -1,4 +1,4 @@
-﻿type NetworkType = 'wifi' | 'none'
+type NetworkType = 'wifi' | 'none'
 
 interface NetworkState {
   type:        NetworkType
@@ -74,7 +74,7 @@ interface IslandAPI {
   getAppIcon:       (pid: number)                                    => Promise<string | null>
 
   // WiFi control
-  scanWifiNetworks: ()                  => Promise<WifiNetwork[]>
+  scanWifiNetworks: (force?: boolean)   => Promise<WifiNetwork[]>
   setWifiEnabled:   (enable: boolean)   => Promise<void>
   connectWifi:      (ssid: string)      => Promise<void>
   getWifiState:     ()                  => Promise<{ enabled: boolean }>

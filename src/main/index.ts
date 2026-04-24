@@ -6,25 +6,13 @@ import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
 import { createTray } from './tray'
 import { attachAppBar } from './appbar'
 import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice, scriptPath } from './system-stats'
-import { spawn } from 'child_process'
+import { spawn, exec } from 'child_process'
 
 app.setName('Dynamic Island')
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
-}
-
-// ── PowerShell helper ──────────────────────────────────────────────────────────
-
-function runPS(cmd: string): Promise<string> {
-  return new Promise((resolve) => {
-    const proc = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', cmd], { windowsHide: true })
-    let out = ''
-    proc.stdout.on('data', (d: Buffer) => (out += d.toString()))
-    proc.on('close', () => resolve(out.trim()))
-    proc.on('error', () => resolve(''))
-  })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,14 +155,15 @@ app.whenReady().then(() => {
 
   // ── IPC: WiFi ─────────────────────────────────────────────────────────────
 
-  ipcMain.handle('scan-wifi-networks', async () => {
+  ipcMain.handle('scan-wifi-networks', async (_e, force: boolean = true) => {
     // Run wifi-scan.py — uses Windows WLAN API (wlanapi.dll) directly via
     // ctypes, the same path Windows Settings takes. It triggers WlanScan,
     // waits for results, then returns a JSON array via stdout.
     return new Promise<{ ssid: string; signal: number; secured: boolean; connected: boolean }[]>((resolve) => {
       const script = scriptPath('wifi-scan.py')
+      const args = force ? [script] : [script, '--no-scan']
       const tryExe = (exe: string) => {
-        const proc = spawn(exe, [script], { windowsHide: true })
+        const proc = spawn(exe, args, { windowsHide: true })
         let stdout = ''
         proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
         proc.stderr.on('data', (d: Buffer) => {
@@ -194,20 +183,28 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('set-wifi-enabled', async (_e, enable: boolean) => {
-    const nameOut = await runPS(`netsh wlan show interfaces | Select-String 'Name' | Select-Object -First 1`)
-    const match   = nameOut.match(/Name\s*:\s*(.+)/)
-    const adapter = match ? match[1].trim() : 'Wi-Fi'
-    await runPS(`netsh interface set interface "${adapter}" ${enable ? 'enabled' : 'disabled'}`)
+    return new Promise<void>((resolve) => {
+      const script = scriptPath('wifi-toggle.py')
+      exec(`py "${script}" ${enable ? '--enable' : '--disable'}`, { windowsHide: true }, () => {
+        resolve()
+      })
+    })
   })
 
   ipcMain.handle('get-wifi-state', async () => {
-    const out = await runPS(`netsh wlan show interfaces`)
-    if (!out || out.includes('no wireless interface')) return { enabled: false }
-    return { enabled: out.includes('State') }
+    return new Promise<{ enabled: boolean }>((resolve) => {
+      exec('netsh wlan show interfaces', { windowsHide: true }, (_err, stdout) => {
+        if (!stdout || stdout.includes('no wireless interface')) return resolve({ enabled: false })
+        const isOff = stdout.includes('Software Off') || stdout.includes('Hardware Off')
+        resolve({ enabled: !isOff })
+      })
+    })
   })
 
   ipcMain.handle('connect-wifi', async (_e, ssid: string) => {
-    await runPS(`netsh wlan connect name="${ssid}" 2>$null`)
+    return new Promise<void>((resolve) => {
+      exec(`netsh wlan connect name="${ssid}"`, { windowsHide: true }, () => resolve())
+    })
   })
 
   // ── Island hit-box + interaction interval ──────────────────────────────────

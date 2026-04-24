@@ -1,11 +1,12 @@
 """
 wifi-scan.py — one-shot WiFi network scanner via Windows WLAN API.
 
-Uses WlanOpenHandle → WlanEnumInterfaces → WlanScan → (wait) →
+Uses WlanOpenHandle → WlanEnumInterfaces → WlanScan →
 WlanGetAvailableNetworkList → WlanFreeMemory → WlanCloseHandle.
 
-This is the exact same API path that Windows Settings uses, so it
-always returns the full list of nearby networks (not just cached ones).
+This is the exact same API path that Windows Settings uses.
+By skipping the sleep after WlanScan, we return cached networks
+instantly while the OS scans asynchronously in the background.
 
 Outputs a single JSON array to stdout then exits.
 """
@@ -14,7 +15,6 @@ import ctypes
 import ctypes.wintypes as wt
 import json
 import sys
-import time
 
 # ── wlanapi.dll bindings ───────────────────────────────────────────────────────
 
@@ -142,7 +142,7 @@ def ssid_bytes_to_str(ssid: DOT11_SSID) -> str:
         return raw.decode('latin-1', errors='replace')
 
 
-def scan() -> list:
+def scan(force: bool = True) -> list:
     handle   = wt.HANDLE()
     version  = wt.DWORD()
 
@@ -171,15 +171,20 @@ def scan() -> list:
 
         results = []
 
-        for i in range(n_ifaces):
-            iface    = ifaces[i]
-            guid_ptr = ctypes.pointer(iface.InterfaceGuid)
+        if force:
+            for i in range(n_ifaces):
+                iface    = ifaces[i]
+                guid_ptr = ctypes.pointer(iface.InterfaceGuid)
 
-            # Trigger an active scan on this interface
-            _wlan.WlanScan(handle, guid_ptr, None, None, None)
+                # Trigger an active scan on this interface (returns immediately,
+                # Windows performs the actual scan asynchronously).
+                _wlan.WlanScan(handle, guid_ptr, None, None, None)
 
-        # Windows needs a moment to collect beacon responses
-        time.sleep(2.5)
+            # We DO NOT sleep here anymore! We immediately return the currently
+            # cached networks. The asynchronous scan will finish in the background
+            # over the next few seconds, and the UI's 7-second soft-polling interval
+            # will automatically pick up the new networks (like 5GHz bands) once
+            # Windows finishes processing them.
 
         seen = set()
 
@@ -235,7 +240,8 @@ def scan() -> list:
 
 if __name__ == '__main__':
     try:
-        print(json.dumps(scan()), flush=True)
+        force = '--no-scan' not in sys.argv
+        print(json.dumps(scan(force=force)), flush=True)
     except Exception as e:
         print(json.dumps([]), flush=True)
         print(str(e), file=sys.stderr, flush=True)
