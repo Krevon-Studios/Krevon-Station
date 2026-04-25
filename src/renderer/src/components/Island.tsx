@@ -86,7 +86,7 @@ function IdleExpandedContent() {
         <span className="text-[11px] text-white/40 leading-none tracking-wide">{date}</span>
       </div>
       <div className="flex items-center gap-[6px]">
-        <div className="w-[2px] h-[2px] rounded-full bg-[#7C6AFF]" />
+        <div className="w-[2px] h-[2px] rounded-full" style={{ background: 'rgb(var(--accent-soft-rgb))' }} />
         <span className="text-[11px] text-white/30 tracking-wide">Dynamic Island</span>
       </div>
     </motion.div>
@@ -104,15 +104,16 @@ function SessionExpandedContent() {
       exit={{ opacity: 0, y: -4, transition: { duration: 0.12 } }}
       className="flex items-center gap-[14px] w-full px-5"
     >
-      <div className="w-[36px] h-[36px] rounded-full bg-[#7C6AFF]/15 border border-[#7C6AFF]/30 flex items-center justify-center shrink-0">
-        <Zap size={16} strokeWidth={2} color="#7C6AFF" />
+      <div className="w-[36px] h-[36px] rounded-full flex items-center justify-center shrink-0"
+        style={{ background: 'rgba(var(--accent-rgb), 0.15)', border: '1px solid rgba(var(--accent-rgb), 0.30)' }}>
+        <Zap size={16} strokeWidth={2} style={{ color: 'rgb(var(--accent-soft-rgb))' }} />
       </div>
       <div className="flex flex-col gap-[5px]">
         <span className="text-[14px] font-semibold text-white leading-none tracking-tight">Claude Code</span>
         <span className="text-[11px] text-white/40 leading-none">Session started</span>
       </div>
       <div className="ml-auto">
-        <span className="text-[10px] text-[#7C6AFF]/60 font-mono">LIVE</span>
+        <span className="text-[10px] font-mono" style={{ color: 'rgba(var(--accent-rgb), 0.60)' }}>LIVE</span>
       </div>
     </motion.div>
   )
@@ -156,15 +157,16 @@ function DoneExpandedContent({ state }: { state: Extract<IslandState, { mode: 't
       exit={{ opacity: 0, y: -4, transition: { duration: 0.12 } }}
       className="flex items-center gap-[14px] w-full px-5"
     >
-      <div className="w-[36px] h-[36px] rounded-full bg-[#34D399]/12 border border-[#34D399]/25 flex items-center justify-center shrink-0">
-        <Check size={16} strokeWidth={2.5} color="#34D399" />
+      <div className="w-[36px] h-[36px] rounded-full flex items-center justify-center shrink-0"
+        style={{ background: 'rgba(var(--accent-rgb), 0.12)', border: '1px solid rgba(var(--accent-rgb), 0.25)' }}>
+        <Check size={16} strokeWidth={2.5} style={{ color: 'rgb(var(--accent-soft-rgb))' }} />
       </div>
       <div className="flex flex-col gap-[5px]">
-        <span className="text-[14px] font-semibold text-[#34D399] leading-none tracking-tight">Task complete</span>
+        <span className="text-[14px] font-semibold leading-none tracking-tight" style={{ color: 'rgb(var(--accent-soft-rgb))' }}>Task complete</span>
         <div className="flex items-center gap-[7px] text-[11px] text-white/40 leading-none">
           <span>{state.turns} turn{state.turns !== 1 ? 's' : ''}</span>
           {secs && <><Sep /><span>{secs}</span></>}
-          {cost && <><Sep /><span className="text-[#34D399]/70">{cost}</span></>}
+          {cost && <><Sep /><span style={{ color: 'rgba(var(--accent-rgb), 0.70)' }}>{cost}</span></>}
         </div>
       </div>
     </motion.div>
@@ -236,8 +238,10 @@ function MediaExpandedContent({
               <PaginationDots count={state.sessions.length} activeIndex={state.activeIndex} setIndex={setMediaIndex} />
             )}
           </div>
-          <div className={`w-[6px] h-[6px] rounded-full ${isPlaying ? 'bg-[#34D399]' : 'bg-white/20'}`}
-            style={isPlaying ? { boxShadow: '0 0 6px #34D399' } : {}} />
+          <div className="w-[6px] h-[6px] rounded-full"
+            style={isPlaying
+              ? { background: 'rgb(var(--accent-soft-rgb))', boxShadow: '0 0 6px rgb(var(--accent-soft-rgb))' }
+              : { background: 'rgba(255,255,255,0.20)' }} />
         </div>
 
         {/* Title & artist */}
@@ -332,8 +336,8 @@ function ClosedContent({ state }: { state: IslandState }) {
       className="flex items-center justify-center w-full h-full"
     >
       {isClaude ? (
-        <span className="w-[5px] h-[5px] rounded-full bg-[#7C6AFF] shrink-0"
-          style={{ boxShadow: '0 0 5px #7C6AFF' }} />
+        <span className="w-[5px] h-[5px] rounded-full shrink-0"
+          style={{ background: 'rgb(var(--accent-soft-rgb))', boxShadow: '0 0 5px rgb(var(--accent-soft-rgb))' }} />
       ) : (
         <div className="flex items-center justify-center gap-[8px] text-white w-full px-4">
           <span className="text-[12px] font-medium tracking-wide whitespace-nowrap">{date}</span>
@@ -368,22 +372,26 @@ function TinyVisualizer({ isPlaying }: { isPlaying: boolean }) {
   return (
     <div className="flex items-center gap-[2px] h-[12px] shrink-0">
       <motion.div
-        className="w-[2px] bg-[#34D399] rounded-full"
+        className="w-[2px] rounded-full"
+        style={{ background: 'rgb(var(--accent-soft-rgb))' }}
         animate={{ height: isPlaying ? [4, 10, 4, 12, 4] : 3 }}
         transition={{ repeat: Infinity, duration: 1.1, ease: "easeInOut" }}
       />
       <motion.div
-        className="w-[2px] bg-[#34D399] rounded-full"
+        className="w-[2px] rounded-full"
+        style={{ background: 'rgb(var(--accent-soft-rgb))' }}
         animate={{ height: isPlaying ? [6, 4, 12, 6, 6] : 3 }}
         transition={{ repeat: Infinity, duration: 1.3, ease: "easeInOut" }}
       />
       <motion.div
-        className="w-[2px] bg-[#34D399] rounded-full"
+        className="w-[2px] rounded-full"
+        style={{ background: 'rgb(var(--accent-soft-rgb))' }}
         animate={{ height: isPlaying ? [4, 12, 4, 8, 4] : 3 }}
         transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
       />
       <motion.div
-        className="w-[2px] bg-[#34D399] rounded-full"
+        className="w-[2px] rounded-full"
+        style={{ background: 'rgb(var(--accent-soft-rgb))' }}
         animate={{ height: isPlaying ? [8, 4, 10, 4, 8] : 3 }}
         transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
       />
@@ -440,9 +448,11 @@ function PrevIcon({ size }: { size: number }) {
 function PulsingOrb() {
   return (
     <div className="relative w-[36px] h-[36px] shrink-0 flex items-center justify-center">
-      <span className="absolute inset-0 rounded-full bg-[#7C6AFF]/20 animate-ping" style={{ animationDuration: '1.4s' }} />
-      <span className="relative w-[28px] h-[28px] rounded-full bg-[#7C6AFF]/15 border border-[#7C6AFF]/30 flex items-center justify-center">
-        <Zap size={12} strokeWidth={2.2} color="#7C6AFF" />
+      <span className="absolute inset-0 rounded-full animate-ping"
+        style={{ background: 'rgba(var(--accent-rgb), 0.20)', animationDuration: '1.4s' }} />
+      <span className="relative w-[28px] h-[28px] rounded-full flex items-center justify-center"
+        style={{ background: 'rgba(var(--accent-rgb), 0.15)', border: '1px solid rgba(var(--accent-rgb), 0.30)' }}>
+        <Zap size={12} strokeWidth={2.2} style={{ color: 'rgb(var(--accent-soft-rgb))' }} />
       </span>
     </div>
   )
@@ -521,15 +531,15 @@ export function Island() {
         {/* State glow overlays */}
         {(state.mode === 'tool_active' || state.mode === 'session_start') && (
           <div className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(124,106,255,0.06) 0%, transparent 70%)' }} />
+            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(var(--accent-rgb), 0.06) 0%, transparent 70%)' }} />
         )}
         {state.mode === 'task_done' && (
           <div className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(52,211,153,0.06) 0%, transparent 70%)' }} />
+            style={{ background: 'radial-gradient(ellipse at 50% 0%, rgba(var(--accent-rgb), 0.06) 0%, transparent 70%)' }} />
         )}
         {state.mode === 'media' && isExpanded && (
           <div className="absolute inset-0 pointer-events-none"
-            style={{ background: 'radial-gradient(ellipse at 20% 50%, rgba(29,185,84,0.04) 0%, transparent 60%)' }} />
+            style={{ background: 'radial-gradient(ellipse at 20% 50%, rgba(var(--accent-rgb), 0.04) 0%, transparent 60%)' }} />
         )}
       </motion.div>
     </div>

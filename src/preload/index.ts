@@ -53,6 +53,7 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.removeAllListeners('system-stats')
     ipcRenderer.removeAllListeners('drawer:show')
     ipcRenderer.removeAllListeners('drawer:closed')
+    ipcRenderer.removeAllListeners('accent-color')
   },
 
   switchVirtualDesktop: (targetIndex: number) => ipcRenderer.send('switch-virtual-desktop', targetIndex),
@@ -114,4 +115,14 @@ contextBridge.exposeInMainWorld('island', {
 
   // ── Drawer sizing ──────────────────────────────────────────────────────────
   setDrawerHeight: (h: number): void             => ipcRenderer.send('drawer:resize', h),
+
+  // ── Accent color ───────────────────────────────────────────────────────────
+  getAccentColor: (): Promise<{ r: number; g: number; b: number }> =>
+    ipcRenderer.invoke('get-accent-color'),
+
+  onAccentColor: (cb: (data: { r: number; g: number; b: number }) => void) => {
+    const fn = (_e: any, d: { r: number; g: number; b: number }) => cb(d)
+    ipcRenderer.on('accent-color', fn)
+    return () => ipcRenderer.removeListener('accent-color', fn)
+  },
 })

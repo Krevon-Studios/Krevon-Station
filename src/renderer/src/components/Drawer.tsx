@@ -97,8 +97,9 @@ function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle(): void; dis
     <button
       onClick={onToggle}
       disabled={disabled}
+      style={{ background: on ? 'rgb(var(--accent-soft-rgb))' : 'rgba(255,255,255,0.15)' }}
       className={`relative w-[40px] h-[22px] rounded-full transition-colors duration-250 cursor-pointer shrink-0
-        ${on ? 'bg-[#3b82f6]' : 'bg-white/15'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       <motion.span
         className="absolute top-[3px] w-[16px] h-[16px] rounded-full bg-white shadow-sm"
@@ -133,7 +134,7 @@ function Slider({ value, onChange, onCommit }: {
       onPointerUp={e => { if (!dragging.current) return; dragging.current = false; const v = clamp(e.clientX); onChange(v); onCommit(v) }}
     >
       <div className="w-full h-[5px] rounded-full bg-white/15">
-        <div className="h-full rounded-full bg-[#3b82f6]/90" style={{ width: `${value}%` }} />
+        <div className="h-full rounded-full" style={{ background: 'rgba(var(--accent-soft-rgb), 0.90)', width: `${value}%` }} />
       </div>
       <div
         className="absolute w-[15px] h-[15px] rounded-full bg-white shadow-md group-hover:scale-110 transition-transform duration-75"
@@ -267,8 +268,8 @@ function MainPage({
     <div className="flex flex-col gap-[10px] p-[14px]">
 
       {/* ── WiFi pill ────────────────────────────────────────────────────── */}
-      <div className={`flex rounded-[14px] overflow-hidden transition-colors duration-200
-        ${isActive ? 'bg-[#3b82f6]/15' : 'bg-white/7'}`}
+      <div className="flex rounded-[14px] overflow-hidden transition-colors duration-200"
+        style={{ background: isActive ? 'rgba(var(--accent-soft-rgb), 0.15)' : 'rgba(255,255,255,0.07)' }}
       >
         <button
           onClick={onWifiToggle}
@@ -276,10 +277,10 @@ function MainPage({
           className="flex-1 flex items-center gap-[10px] px-[12px] py-[10px] cursor-pointer text-left
             hover:brightness-110 active:brightness-90 transition-all disabled:opacity-60"
         >
-          <div className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0 transition-colors
-            ${isActive ? 'bg-[#3b82f6]/28' : 'bg-white/10'}`}
+          <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0 transition-colors"
+            style={{ background: isActive ? 'rgba(var(--accent-soft-rgb), 0.28)' : 'rgba(255,255,255,0.10)' }}
           >
-            <NetIcon n={network} size={15} color={isActive ? '#93c5fd' : 'rgba(255,255,255,0.65)'} />
+            <NetIcon n={network} size={15} color={isActive ? 'var(--accent-light)' : 'rgba(255,255,255,0.65)'} />
           </div>
           <div className="flex flex-col gap-[3px]">
             <span className="text-[13px] font-semibold text-white leading-none">Wi-Fi</span>
@@ -386,14 +387,15 @@ function SoundPage({
                 className={`w-full flex items-center gap-[10px] px-[10px] py-[9px] rounded-[12px] transition-colors cursor-pointer text-left
                   ${active ? 'bg-white/10' : 'hover:bg-white/6'}`}
               >
-                <div className={`w-[3px] h-[18px] rounded-full shrink-0 transition-colors ${active ? 'bg-[#3b82f6]' : 'bg-transparent'}`} />
+                <div className="w-[3px] h-[18px] rounded-full shrink-0 transition-colors"
+                  style={{ background: active ? 'rgb(var(--accent-soft-rgb))' : 'transparent' }} />
                 <div className="w-[28px] h-[28px] rounded-full bg-white/8 flex items-center justify-center shrink-0">
                   <DevIcon name={d.name} size={13} color={active ? 'white' : 'rgba(255,255,255,0.5)'} />
                 </div>
                 <span className={`flex-1 text-[12px] leading-none truncate ${active ? 'text-white font-medium' : 'text-white/65'}`}>
                   {d.name}
                 </span>
-                {active && <Check size={12} color="#60a5fa" strokeWidth={2.5} />}
+                {active && <Check size={12} color="var(--accent-light)" strokeWidth={2.5} />}
               </motion.button>
             )
           })}
@@ -504,17 +506,18 @@ function WifiPage({
                     onClick={() => !isConn && !connectingSSID && onConnect(n.ssid)}
                     disabled={busyOther}
                     className={`flex items-center gap-[10px] px-[10px] py-[10px] rounded-[12px] transition-colors cursor-pointer text-left group
-                    ${isConn ? 'bg-[#3b82f6]/13' : isConnecting ? 'bg-white/8' : 'hover:bg-white/6'}
+                    ${isConnecting ? 'bg-white/8' : isConn ? '' : 'hover:bg-white/6'}
                     ${busyOther ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    style={isConn ? { background: 'rgba(var(--accent-soft-rgb), 0.13)' } : undefined}
                   >
-                    <div className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0
-                    ${isConn ? 'bg-[#3b82f6]/25' : isConnecting ? 'bg-white/12' : 'bg-white/8'}`}
+                    <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: isConn ? 'rgba(var(--accent-soft-rgb), 0.25)' : isConnecting ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)' }}
                     >
                       {isConnecting
                         ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}>
                           <RefreshCw size={14} color="rgba(255,255,255,0.7)" strokeWidth={2} />
                         </motion.div>
-                        : <SigIcon signal={n.signal} size={14} color={isConn ? '#93c5fd' : 'rgba(255,255,255,0.6)'} />
+                        : <SigIcon signal={n.signal} size={14} color={isConn ? 'var(--accent-light)' : 'rgba(255,255,255,0.6)'} />
                       }
                     </div>
                     <div className="flex flex-col gap-[2px] flex-1 min-w-0">
@@ -535,7 +538,7 @@ function WifiPage({
                       <KeyRound size={11} color="rgba(255,255,255,0.25)" strokeWidth={2} />
                     )}
                     {isConn
-                      ? <Check size={13} color="#60a5fa" strokeWidth={2.5} />
+                      ? <Check size={13} color="var(--accent-light)" strokeWidth={2.5} />
                       : isConnecting
                         ? null
                         : <ChevronRight size={12} color="rgba(255,255,255,0.15)" strokeWidth={2}

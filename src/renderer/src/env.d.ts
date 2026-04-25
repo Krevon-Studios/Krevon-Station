@@ -85,6 +85,10 @@ interface IslandAPI {
 
   // Drawer sizing
   setDrawerHeight: (h: number)      => void
+
+  // Accent color
+  getAccentColor: () => Promise<{ r: number; g: number; b: number }>
+  onAccentColor:  (cb: (data: { r: number; g: number; b: number }) => void) => () => void
 }
 
 declare interface Window {

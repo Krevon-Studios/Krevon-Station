@@ -1,4 +1,4 @@
-import { app, ipcMain, screen, powerMonitor } from 'electron'
+import { app, ipcMain, screen, powerMonitor, systemPreferences } from 'electron'
 import { createIslandWindow, createTaskbarWindow, createDrawerWindow, TASKBAR_H } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
@@ -53,6 +53,28 @@ app.whenReady().then(() => {
   )
 
   islandWin.once('show', () => pinIslandToTop())
+
+  // ── Accent color ───────────────────────────────────────────────────────────
+
+  const allWins = [taskbarWin, islandWin, drawerWin]
+
+  function parseAccent() {
+    const raw = systemPreferences.getAccentColor()
+    return { r: parseInt(raw.slice(0, 2), 16), g: parseInt(raw.slice(2, 4), 16), b: parseInt(raw.slice(4, 6), 16) }
+  }
+
+  function broadcastAccent() {
+    const payload = parseAccent()
+    for (const w of allWins) { if (!w.isDestroyed()) w.webContents.send('accent-color', payload) }
+  }
+
+  const onAccentChanged = () => broadcastAccent()
+  systemPreferences.on('accent-color-changed', onAccentChanged)
+
+  for (const w of allWins) { w.webContents.once('did-finish-load', () => broadcastAccent()) }
+
+  ipcMain.handle('get-accent-color', () => parseAccent())
+
   startHookServer(islandWin)
   startMediaWatcher(islandWin)
   startDesktopWatcher(taskbarWin)
@@ -446,6 +468,7 @@ app.whenReady().then(() => {
     screen.off('display-removed', handleDisplayChange)
     powerMonitor.off('unlock-screen', onUnlock)
     powerMonitor.off('resume', onResume)
+    systemPreferences.off('accent-color-changed', onAccentChanged)
     detachAppBar()
   }
 

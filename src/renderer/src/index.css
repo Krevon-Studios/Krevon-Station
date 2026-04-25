@@ -12,6 +12,12 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root {
+  --accent-rgb: 124, 106, 255;
+  --accent-soft-rgb: 150, 136, 255;
+  --accent-light: #b0a6ff;
+}
+
 html,
 body,
 #root {

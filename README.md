@@ -12,6 +12,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
 - **Windows media controls** — play/pause, skip forward/back, directly from the pill
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
+- **Windows accent color theming** — all UI accents (pill indicators, drawer toggles, sliders, WiFi/audio active states) automatically match the Windows accent color set in Settings → Personalization → Colors; updates live without restart
 - **Interactive Control Drawer** — click the system tray icons to open a sleek, Framer Motion-animated control panel featuring a live WiFi network scanner and a real-time per-app audio mixer; click the avatar to jump directly to Windows Settings → Accounts
 - **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
 - **Live system tray icons** — WiFi (4 signal levels), no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all highly optimized using hybrid event-listeners and polling
