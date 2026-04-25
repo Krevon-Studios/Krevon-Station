@@ -36,7 +36,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 | Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
 | Hook server | Express on `127.0.0.1:7823` |
 | System stats | Python 3 + `pycaw` + `psutil` + `wlanapi.dll` (hybrid event-driven architecture) |
-| Notifications | Python 3 + Windows Runtime (`Windows.UI.Notifications`) via `winrt` / SQLite WNF DB |
+| Notifications | Python 3 + Windows Runtime (`winrt` — `UserNotificationListener`) — real-time WinRT events with 2 s poll fallback |
 
 ---
 
@@ -208,22 +208,33 @@ Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-st
 ### Notification System
 
 ```
-notification-monitor.py (persistent Python process)
+notification-monitor.py (persistent Python process — STA thread, COM apartment)
     │
-    ├─ Reads Windows Notification SQLite DB
-    │      %LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db
+    ├─ UserNotificationListener.request_access_async()  [WinRT]
+    │      → requires Settings > Privacy > Notifications access
     │
-    ├─ Polls for new/removed toast notifications every ~2s
-    │      → emits JSON lines: { type, id, appId, appName, title, body, arrivalTime }
+    ├─ Initial snapshot: get_notifications_async(TOAST)
+    │      → emits {type:"added", id, appId, appName, title, body, arrivalTime}
     │
-    └─ stdout → createInterface readline → sendToNotifWin()
+    ├─ add_notification_changed() event subscription  [best-effort]
+    │      → on change: re-runs snapshot, emits added/removed diffs
+    │      → falls back to 2 s poll if event registration fails
+    │
+    ├─ stdin: {"cmd": "remove", "ids": [<int>, ...]}
+    │      → asyncio.run_coroutine_threadsafe → STA loop
+    │      → remove_notification(id) per ID
+    │      → immediately emits {type:"removed", id} — no waiting for event/poll
+    │      → _removed_ids set prevents duplicate removed events from next snapshot
+    │
+    └─ stdout JSON lines → createInterface readline → sendToNotifWin()
                     │
                     ▼ IPC: island:notifications
               NotificationCards.tsx (notifWin renderer)
                     │
                     ├─ Adds cards to scrollable panel below drawer
-                    ├─ Dismiss button → clearNotifications() PS1 via IPC
-                    └─ Click card → systemAction('launch:<appId>')
+                    ├─ Dismiss (X button) → dismissNotifications([id]) → Python stdin
+                    ├─ Clear All → dismissNotifications(allIds) → Python stdin
+                    └─ Click card → systemAction('launch:<appId>') + dismiss
 ```
 
 The notification window is a full-height transparent overlay co-located with the drawer window. It is **never resized or repositioned during animations** — Framer Motion animates the panel entirely inside the fixed transparent Electron window. The panel's CSS `top` offset is updated via `drawer:height` IPC whenever the drawer card height changes, keeping it flush below the drawer card with no Electron window movement.
@@ -306,11 +317,10 @@ App start
 | `set-wifi-enabled` | Renderer → Main (invoke) | `enable: boolean` |
 | `connect-wifi` | Renderer → Main (invoke) | `ssid: string` |
 | `get-notif-icon` | notifWin → Main (invoke) | `appId: string` — returns base64 PNG or null |
-| `clear-notifications` | notifWin → Main (invoke) | `appIds: string[]` |
+| `dismiss-notifications` | notifWin → Main (invoke) | `ids: number[]` — removes specific WinRT notifications via Python stdin |
 | `set-session-volume` | Renderer → Main | `(pid, volume, muted)` |
 | `set-audio-device` | Renderer → Main | `deviceId: string` |
 | `switch-virtual-desktop` | Renderer → Main | `targetIndex: number` |
-| `set-ignore-mouse` | Renderer → Main | `boolean` |
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |
 | `set-hit-box` | Renderer → Main | `(w, h)` |
 | `get-user-info` | Renderer → Main (invoke) | — returns `{ avatar: string\|null, name: string }` |
@@ -374,7 +384,7 @@ Unknown tools are title-cased from their snake_case name.
 - **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled over island hover zone and taskbar
 - **Session Restore** — DWM drops hit-test caching for transparent, non-focusable windows after sleep, lock screens, or exiting exclusive fullscreen apps. The app forces DWM to rebuild the interactive region using a lazy, hover-triggered 1px bounds resize.
 - **Registered App Bar** — the taskbar window is registered with the Windows shell via `SHAppBarMessage` so the OS reserves the top 32px and all apps/maximised windows respect it as unusable space; the bar survives display-metrics changes
-- **Notification overlay** — a separate full-height transparent `notifWin` sits co-located with the drawer window (same x/y anchor). It is never resized or repositioned during animations; Framer Motion handles all animation inside the fixed overlay, with CSS `top` offset updated via IPC to track the drawer card's current height
+- **Notification overlay** — a separate full-height transparent `notifWin` sits co-located with the drawer window (same x/y anchor). To bypass Windows DWM bugs that break the hit-test cache for hidden transparent windows, it is permanently visible but completely click-through by default. It restricts its interactive area dynamically from `notifPanelTop` downwards (computed synchronously in the main process during drawer resizes). Framer Motion handles all animation inside this fixed overlay, with CSS `top` offset updated via IPC to track the drawer card's current height.
 
 ---
 

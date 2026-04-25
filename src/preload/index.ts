@@ -49,8 +49,6 @@ contextBridge.exposeInMainWorld('island', {
     return () => ipcRenderer.removeListener('island:notifications', fn)
   },
 
-  setNotifHeight: (h: number): void => ipcRenderer.send('notification:resize', h),
-
   removeAllListeners: () => {
     ipcRenderer.removeAllListeners('island:session-start')
     ipcRenderer.removeAllListeners('island:tool-active')
@@ -75,8 +73,6 @@ contextBridge.exposeInMainWorld('island', {
     return () => ipcRenderer.removeListener('system-stats', fn)
   },
 
-  setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('set-ignore-mouse', ignore),
-  setWindowSize: (_w: number, _h: number) => {},
   setHitBox: (w: number, h: number) => ipcRenderer.send('set-hit-box', w, h),
 
   // ── Drawer control ─────────────────────────────────────────────────────────
@@ -117,8 +113,9 @@ contextBridge.exposeInMainWorld('island', {
   setAudioDevice:   (deviceId: string)                                  => ipcRenderer.invoke('set-audio-device', deviceId),
   setSessionVolume: (pid: number, volume?: number, muted?: boolean)     => ipcRenderer.invoke('set-session-volume', pid, volume, muted),
   getAppIcon:       (pid: number)                                       => ipcRenderer.invoke('get-app-icon', pid),
-  getNotifIcon:     (appId: string)                                     => ipcRenderer.invoke('get-notif-icon', appId),
-  clearNotifications: (appIds: string[])                                => ipcRenderer.invoke('clear-notifications', appIds),
+  getNotifIcon:         (appId: string)   => ipcRenderer.invoke('get-notif-icon', appId),
+  // Removes specific notifications by WinRT ID (precise, per-notification)
+  dismissNotifications: (ids: number[])   => ipcRenderer.invoke('dismiss-notifications', ids),
 
   // ── WiFi control ───────────────────────────────────────────────────────────
   scanWifiNetworks: ()                   => ipcRenderer.invoke('scan-wifi-networks'),

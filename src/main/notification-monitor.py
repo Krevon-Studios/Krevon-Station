@@ -1,307 +1,300 @@
 """
 notification-monitor.py
-Reads Windows notification database (wpndatabase.db) every 1s.
-Emits newline-delimited JSON to stdout. No extra dependencies.
+=======================
+Uses the official Windows Runtime API:
+  Windows.UI.Notifications.Management.UserNotificationListener
+
+Protocol (stdout, newline-delimited JSON):
+  {"type": "added",   "id": <int>, "appId": "<str>", "appName": "<str>",
+   "title": "<str>", "body": "<str>", "arrivalTime": <unix_ms>}
+  {"type": "removed", "id": <int>}
+
+Stdin commands (from Electron main process):
+  {"cmd": "remove", "ids": [<int>, ...]}  → removes specific notifications
+
+Requirements:
+  pip install winrt-Windows.Foundation winrt-Windows.Foundation.Collections
+              winrt-Windows.UI.Notifications winrt-Windows.UI.Notifications.Management
 """
-import sqlite3
-import os
+
+import asyncio
+import ctypes
+import io
 import json
 import sys
+import threading
 import time
-import gzip
-import shutil
-import tempfile
 import winreg
-import xml.etree.ElementTree as ET
 
-DB_PATH = os.path.join(
-    os.environ.get('LOCALAPPDATA', ''),
-    'Microsoft', 'Windows', 'Notifications', 'wpndatabase.db'
-)
-TMP_DB = os.path.join(tempfile.gettempdir(), 'di_notif_snapshot.db')
+# Force line-buffered (unbuffered for binary) output so every emit() reaches
+# Electron's readline pipe immediately, even when stdout is not a tty.
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
 
-def emit_err(msg: str):
-    # Only emit critical errors, suppress routine diagnostic logs
-    if "error:" in msg.lower() or "failed:" in msg.lower() or "not found" in msg.lower():
-        sys.stderr.write(f'[notif:err] {msg}\n')
-        sys.stderr.flush()
+# ── COM STA setup ──────────────────────────────────────────────────────────────
+# WinRT event registration requires an STA (Single-Threaded Apartment) thread.
+COINIT_APARTMENTTHREADED = 0x2
 
-# ── DB open ───────────────────────────────────────────────────────────────────
+# ── Shared state ───────────────────────────────────────────────────────────────
+# Set by _main_impl() once the listener is ready; read by _stdin_reader().
+_listener_ref: object = None
+_sta_loop: asyncio.AbstractEventLoop | None = None
+# Set of IDs already emitted as removed via _do_remove — lets snapshot() skip
+# re-emitting a duplicate removed event for the same ID.
+_removed_ids: set[int] = set()
 
-def open_db():
-    escaped = DB_PATH.replace('\\', '/')
-    for uri in [f'file:{escaped}?immutable=1', f'file:{escaped}?mode=ro']:
-        try:
-            con = sqlite3.connect(uri, uri=True, timeout=1.0)
-            con.row_factory = sqlite3.Row
-            return con
-        except Exception:
-            pass
+# ── App identity ───────────────────────────────────────────────────────────────
+APP_ID = "DynamicIsland.NotificationListener"
+
+
+def register_aumid() -> None:
+    key_path = rf"SOFTWARE\Classes\AppUserModelId\{APP_ID}"
     try:
-        shutil.copy2(DB_PATH, TMP_DB)
-        con = sqlite3.connect(TMP_DB, timeout=1.0)
-        con.row_factory = sqlite3.Row
-        return con
-    except Exception as e:
-        emit_err(f'open failed: {e}')
-        return None
-
-def get_columns(con, table: str) -> list:
-    try:
-        return [r[1] for r in con.execute(f'PRAGMA table_info({table})').fetchall()]
-    except Exception:
-        return []
-
-# ── Query builder ─────────────────────────────────────────────────────────────
-
-def build_query(notif_cols: list, handler_cols: list) -> str:
-    n_pk    = next((c for c in notif_cols if c.lower() in ('id','recordid','notificationid')), notif_cols[0])
-    fk      = next((c for c in notif_cols if 'handler' in c.lower() and 'id' in c.lower()), None)
-    h_pk    = next((c for c in handler_cols if 'record' in c.lower() or c.lower()=='id'), 'RecordId')
-    app_col = next((c for c in handler_cols if 'primary' in c.lower() or 'aumid' in c.lower()), None)
-
-    sel_app     = f'h.{app_col}' if app_col else 'NULL'
-    sel_payload = 'n.PayloadData' if 'PayloadData' in notif_cols else 'NULL'
-    sel_blob    = 'n.Payload'     if 'Payload'     in notif_cols else 'NULL'
-    arrival     = 'n.ArrivalTime' if 'ArrivalTime' in notif_cols else '0'
-    ptype       = 'n.PayloadType' if 'PayloadType' in notif_cols else 'NULL'
-
-    join = (f'FROM Notification n LEFT JOIN NotificationHandler h ON n.{fk} = h.{h_pk}'
-            if fk and app_col else 'FROM Notification n')
-
-    return (
-        f'SELECT n.{n_pk} as _id, {sel_payload} as _text, {sel_blob} as _blob, '
-        f'{sel_app} as _app, {arrival} as _at, {ptype} as _ptype '
-        f'{join} ORDER BY {arrival} DESC LIMIT 30'
-    )
-
-# ── Payload parsing ───────────────────────────────────────────────────────────
-
-def find_xml(blob: bytes) -> str:
-    """Search raw bytes for a <toast or <Toast XML fragment in UTF-8 or UTF-16 LE."""
-    if not blob:
-        return ''
-
-    # UTF-8 search
-    for marker in (b'<toast', b'<Toast'):
-        idx = blob.find(marker)
-        if idx >= 0:
-            try:
-                return blob[idx:].decode('utf-8', errors='replace')
-            except Exception:
-                pass
-
-    # UTF-16 LE search  ('<' = 0x3C 0x00, 't' = 0x74 0x00 ...)
-    for marker_u16 in (b'\x3c\x00\x74\x00\x6f\x00\x61\x00\x73\x00\x74\x00',   # <toast
-                       b'\x3c\x00\x54\x00\x6f\x00\x61\x00\x73\x00\x74\x00'):  # <Toast
-        idx = blob.find(marker_u16)
-        if idx >= 0:
-            try:
-                raw = blob[idx:].decode('utf-16-le', errors='replace')
-                # Strip embedded nulls that bleed through from padding
-                return raw.replace('\x00', '')
-            except Exception:
-                pass
-
-    return ''
-
-def decode_blob(blob) -> str:
-    if not blob or not isinstance(blob, (bytes, bytearray)):
-        return ''
-    b = bytes(blob)
-    # Try gzip decompress first
-    try:
-        b = gzip.decompress(b)
-    except Exception:
-        pass
-    # PayloadType=Xml → plain UTF-8 bytes, decode directly
-    try:
-        text = b.decode('utf-8', errors='replace')
-        if '<' in text:
-            return text
-    except Exception:
-        pass
-    # Fallback: scan for XML markers (handles UTF-16 LE payloads)
-    return find_xml(b)
-
-def parse_payload(text_col, blob_col):
-    """Return (title, body) for toast notifications only, or None to skip."""
-    raw = ''
-    if text_col and not isinstance(text_col, type(None)):
-        raw = text_col if isinstance(text_col, str) else text_col.decode('utf-8', errors='replace')
-        if '<' not in raw:
-            raw = ''
-    if not raw:
-        raw = decode_blob(blob_col)
-    if not raw:
-        return None
-    try:
-        raw = raw[raw.index('<'):]
-        # Skip XML comments / processing instructions before root element
-        root = ET.fromstring(raw)
-        tag = root.tag.split('}')[-1].lower()   # strip any namespace
-        if tag != 'toast':
-            return None                           # tile / badge — not a banner notification
-        texts = root.findall('.//{*}text') or root.findall('.//text')
-        title = (texts[0].text or '').strip() if len(texts) > 0 else ''
-        body  = (texts[1].text or '').strip() if len(texts) > 1 else ''
-        # Skip unresolved resource URIs (localized tile strings, not actual content)
-        if title.startswith('ms-resource:') or body.startswith('ms-resource:'):
-            return None
-        return title, body
-    except Exception:
-        return None
-
-# ── DND state ─────────────────────────────────────────────────────────────────
-
-def get_dnd_state() -> bool:
-    qs = (r'SOFTWARE\Microsoft\Windows\CurrentVersion\CloudStore\Store'
-          r'\DefaultAccount\Current\default'
-          r'\windows.data.notifications.quiethourssettings\Current')
-    try:
-        key  = winreg.OpenKey(winreg.HKEY_CURRENT_USER, qs)
-        data, _ = winreg.QueryValueEx(key, 'Data')
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
+        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Dynamic Island")
+        winreg.SetValueEx(key, "IconUri",     0, winreg.REG_SZ, "")
         winreg.CloseKey(key)
-        return isinstance(data, (bytes, bytearray)) and len(data) > 24
-    except Exception:
-        return False
-
-def app_name_from_id(s: str) -> str:
-    """Extract a human-readable app name from a Windows AUMID or path.
-
-    UWP AUMID format:  Publisher.AppName_PackageHash!EntryPoint
-      e.g.  5319275A.WhatsApp_cv1g1gvanyjgm!App  →  WhatsApp
-            Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MicrosoftEdge  →  MicrosoftEdge
-    Win32 format:  C:\\path\\to\\app.exe  or just  AppName
-    """
-    if not s:
-        return ''
-    # Normalise slashes then split on '!'
-    s = s.replace('\\', '/')
-    parts = s.split('!')
-    pkg = parts[0]          # everything before '!' – the package family name (UWP) or path (Win32)
-    # For paths, take the filename only
-    pkg = pkg.split('/')[-1]
-    # UWP: Publisher.AppName_Hash  →  take last dot-segment, then strip _Hash
-    if '.' in pkg:
-        pkg = pkg.split('.')[-1]   # e.g. "WhatsApp_cv1g1gvanyjgm"
-    pkg = pkg.split('_')[0]        # strip _Hash suffix  →  "WhatsApp"
-    # Strip .exe extension (Win32)
-    return pkg[:-4] if pkg.lower().endswith('.exe') else pkg
-
-# ── Init ──────────────────────────────────────────────────────────────────────
-
-if not os.path.exists(DB_PATH):
-    emit_err(f'DB not found: {DB_PATH}')
-    sys.exit(1)
-
-emit_err(f'DB found: {DB_PATH}')
-
-# Schema probe + payload format diagnostic
-con0 = open_db()
-if con0:
-    nc = get_columns(con0, 'Notification')
-    hc = get_columns(con0, 'NotificationHandler')
-    emit_err(f'cols: {nc}')
-    total = con0.execute('SELECT COUNT(*) FROM Notification').fetchone()[0]
-    emit_err(f'rows: {total}')
-    # Show first 3 rows for payload diagnosis
-    try:
-        sample = con0.execute(
-            'SELECT Id, PayloadType, length(Payload) as plen, '
-            'substr(Payload,1,64) as phex FROM Notification LIMIT 3'
-        ).fetchall()
-        for r in sample:
-            blob = r['phex']
-            hexstr = bytes(blob).hex() if blob and isinstance(blob, (bytes,bytearray)) else str(blob)
-            emit_err(f'  row id={r["Id"]} ptype={r["PayloadType"]} plen={r["plen"]} hex={hexstr[:80]}')
     except Exception as e:
-        emit_err(f'sample err: {e}')
-    con0.close()
-
-# Initial DND
-dnd_now = get_dnd_state()
-print(json.dumps({'type': 'dnd_state', 'enabled': dnd_now}))
-sys.stdout.flush()
-
-# ── Poll loop ─────────────────────────────────────────────────────────────────
-
-query: str|None = None
-last_dnd        = dnd_now
-dnd_tick        = 0
-
-# Start with an empty set so all notifications currently in the DB
-# are emitted as 'added' on the first poll and shown immediately.
-prev_ids: set = set()
-
-while True:
+        emit_err(f"registry write: {e}")
     try:
-        con = open_db()
-        if con is None:
-            time.sleep(2)
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_ID)
+    except Exception as e:
+        emit_err(f"SetCurrentProcessExplicitAppUserModelID: {e}")
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def emit(obj: dict) -> None:
+    print(json.dumps(obj, ensure_ascii=False))
+    sys.stdout.flush()
+
+
+def emit_err(msg: str) -> None:
+    sys.stderr.write(f"[notif:err] {msg}\n")
+    sys.stderr.flush()
+
+
+# ── Stdin command reader ───────────────────────────────────────────────────────
+# Runs on the Python main thread (blocking).
+# Marshals remove_notification() back onto the STA asyncio loop via
+# run_coroutine_threadsafe so the COM call happens on the correct apartment.
+
+def _stdin_reader() -> None:
+    # On Windows, stdin from an Electron pipe may arrive in binary chunks.
+    # Wrap it in a text reader with explicit \n line splitting.
+    try:
+        stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", newline="\n")
+    except AttributeError:
+        stdin = sys.stdin  # fallback for environments without .buffer
+
+    for raw_line in stdin:
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+        try:
+            cmd = json.loads(raw_line)
+        except Exception:
             continue
 
-        if query is None:
-            nc    = get_columns(con, 'Notification')
-            hc    = get_columns(con, 'NotificationHandler')
-            query = build_query(nc, hc)
-            emit_err(f'query ready')
+        if cmd.get("cmd") == "remove":
+            ids = [int(x) for x in cmd.get("ids", []) if x is not None]
+            if not ids or _listener_ref is None or _sta_loop is None:
+                continue
 
-        rows = con.execute(query).fetchall()
-        con.close()
+            # Marshal the removal onto the STA asyncio loop — COM objects must
+            # be called from the apartment thread that created them.
+            # Capture loop reference NOW (module-level, set before listener_ref)
+            loop_ref = _sta_loop
+            listener_ref = _listener_ref
 
-        current_ids: set = set()
-        for row in rows:
-            rid = int(row['_id'])
-            result = parse_payload(row['_text'], row['_blob'])
-            if result is None:
-                continue          # tile / badge / resource-string — skip
-            current_ids.add(rid)
-            if rid not in prev_ids:
-                title, body = result
-                app_id = row['_app'] or ''
-                # ArrivalTime is a Windows FILETIME (100-ns ticks since 1601-01-01)
-                # Convert to Unix milliseconds. Query aliases ArrivalTime as _at.
-                raw_ts = int(row['_at']) if row['_at'] else 0
-                if raw_ts > 10 ** 15:
-                    arrival_ms = (raw_ts - 116444736000000000) // 10000
-                elif raw_ts > 0:
-                    arrival_ms = raw_ts * 1000          # assume Unix seconds
-                else:
-                    arrival_ms = int(time.time() * 1000)
-                out = {
-                    'type':        'added',
-                    'id':          rid,
-                    'appId':       app_id,
-                    'appName':     app_name_from_id(app_id),
-                    'title':       title,
-                    'body':        body,
-                    'arrivalTime': arrival_ms,
-                }
-                emit_err(f'emit id={rid} app={app_name_from_id(app_id)!r} title={title!r}')
-                print(json.dumps(out, ensure_ascii=False))
-                sys.stdout.flush()
+            async def _do_remove(ids: list = ids, _listener=listener_ref) -> None:
+                for nid in ids:
+                    try:
+                        _listener.remove_notification(nid)  # type: ignore[union-attr]
+                        # Emit removed event immediately — do NOT rely on the
+                        # notification_changed event or the 2-second poll fallback.
+                        # The changed-event subscription can fail silently (swallowed
+                        # except at line ~223), leaving the UI stuck with stale state.
+                        _removed_ids.add(nid)
+                        emit({"type": "removed", "id": nid})
+                    except Exception as e:
+                        emit_err(f"remove_notification({nid}): {e}")
+                        # Still emit removed so the UI stays consistent even if
+                        # the WinRT call failed (e.g. notification already gone).
+                        _removed_ids.add(nid)
+                        emit({"type": "removed", "id": nid})
 
-        for rid in sorted(prev_ids - current_ids):
-            print(json.dumps({'type': 'removed', 'id': rid}))
-            sys.stdout.flush()
+            try:
+                asyncio.run_coroutine_threadsafe(_do_remove(), loop_ref)
+            except Exception as e:
+                emit_err(f"schedule remove: {e}")
 
+
+# ── Main async implementation (runs on STA thread) ────────────────────────────
+
+async def _main_impl() -> None:
+    global _listener_ref, _sta_loop
+    _sta_loop = asyncio.get_running_loop()
+
+    register_aumid()
+
+    try:
+        from winrt.windows.ui.notifications.management import (
+            UserNotificationListener,
+            UserNotificationListenerAccessStatus,
+        )
+        from winrt.windows.ui.notifications import (
+            NotificationKinds,
+            KnownNotificationBindings,
+        )
+    except ImportError as e:
+        emit_err(
+            f"Missing winrt packages: {e}  |  "
+            "Run: pip install winrt-Windows.Foundation winrt-Windows.Foundation.Collections "
+            "winrt-Windows.UI.Notifications winrt-Windows.UI.Notifications.Management"
+        )
+        sys.exit(1)
+
+    listener = UserNotificationListener.current
+    status   = await listener.request_access_async()
+
+    if status != UserNotificationListenerAccessStatus.ALLOWED:
+        emit_err(
+            f"Access denied (status={status}). "
+            "Open Settings > Privacy & security > Notifications and "
+            "enable 'Allow apps to access your notifications', then restart."
+        )
+        sys.exit(1)
+
+    # Expose listener to stdin reader — set AFTER access is confirmed
+    _listener_ref = listener
+
+    prev_ids: set[int] = set()
+    loop             = asyncio.get_running_loop()
+    toast_key        = KnownNotificationBindings.toast_generic
+
+    # ── Snapshot: diff Action Center against known state ───────────────────────
+    async def snapshot() -> None:
+        nonlocal prev_ids
+        try:
+            notifs = await listener.get_notifications_async(NotificationKinds.TOAST)
+        except Exception as e:
+            emit_err(f"get_notifications_async: {e}")
+            return
+
+        current_ids: set[int] = set()
+
+        for n in notifs:
+            try:
+                nid = int(n.id)
+                current_ids.add(nid)
+                if nid in prev_ids:
+                    continue  # already reported
+
+                app_id = app_name = ""
+                try:
+                    if n.app_info:
+                        app_id = n.app_info.app_user_model_id or ""
+                        if n.app_info.display_info:
+                            app_name = n.app_info.display_info.display_name or ""
+                except Exception:
+                    pass
+
+                title = body = ""
+                try:
+                    binding = n.notification.visual.get_binding(toast_key)
+                    if binding:
+                        texts = [t.text for t in binding.get_text_elements() if t.text]
+                        title = texts[0] if texts else ""
+                        body  = texts[1] if len(texts) > 1 else ""
+                except Exception as ex:
+                    emit_err(f"parse id={nid}: {ex}")
+
+                emit({
+                    "type":        "added",
+                    "id":          nid,
+                    "appId":       app_id,
+                    "appName":     app_name,
+                    "title":       title,
+                    "body":        body,
+                    "arrivalTime": int(time.time() * 1000),
+                })
+            except Exception as ex:
+                emit_err(f"notification iter: {ex}")
+
+        # Only emit removed for IDs that snapshot() hasn't already seen removed
+        # via an explicit _do_remove call (which emits immediately). This prevents
+        # a duplicate removed event arriving at the renderer for the same ID.
+        stale = (prev_ids - current_ids) - _removed_ids
+        for rid in sorted(stale):
+            emit({"type": "removed", "id": rid})
+
+        # Clean up _removed_ids entries that are no longer in prev_ids anyway
+        _removed_ids.difference_update(prev_ids - current_ids)
         prev_ids = current_ids
 
-    except Exception as e:
-        emit_err(f'poll error: {e}')
-        query = None
+    # ── Initial snapshot ───────────────────────────────────────────────────────
+    await snapshot()
 
-    dnd_tick += 1
-    if dnd_tick >= 5:
-        dnd_tick = 0
+    # ── Real-time event subscription (best-effort; needs STA COM marshaling) ───
+    event_ok = False
+    try:
+        def _on_changed(sender, args):
+            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(snapshot()))
+        listener.add_notification_changed(_on_changed)
+        event_ok = True
+    except Exception:
+        pass  # silently fall back to polling
+
+    # ── Keep alive ─────────────────────────────────────────────────────────────
+    if event_ok:
+        while True:
+            await asyncio.sleep(3600)   # events drive updates
+    else:
+        while True:
+            await asyncio.sleep(2)      # 2-second poll fallback
+            await snapshot()
+
+
+# ── STA thread runner ──────────────────────────────────────────────────────────
+
+def _run_on_sta_thread() -> None:
+    try:
+        ctypes.windll.ole32.CoInitializeEx(None, COINIT_APARTMENTTHREADED)
+    except Exception:
+        pass
+    try:
+        asyncio.run(_main_impl())
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:
+        emit_err(f"fatal: {e}")
+    finally:
         try:
-            cur = get_dnd_state()
-            if cur != last_dnd:
-                last_dnd = cur
-                print(json.dumps({'type': 'dnd_state', 'enabled': cur}))
-                sys.stdout.flush()
+            ctypes.windll.ole32.CoUninitialize()
         except Exception:
             pass
 
-    time.sleep(1)
+
+# ── Entry point ────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    # 1. Start the STA thread (asyncio + WinRT)
+    sta_thread = threading.Thread(target=_run_on_sta_thread, daemon=True)
+    sta_thread.start()
+
+    # 2. Wait until the listener is ready before accepting stdin commands
+    while _listener_ref is None and sta_thread.is_alive():
+        time.sleep(0.05)
+
+    # 3. Block the main thread reading stdin commands
+    if sta_thread.is_alive():
+        try:
+            _stdin_reader()
+        except KeyboardInterrupt:
+            pass
+
+    try:
+        sta_thread.join()
+    except KeyboardInterrupt:
+        pass

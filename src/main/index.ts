@@ -106,6 +106,7 @@ app.whenReady().then(() => {
     }
   }
 
+  let _notifProc: ReturnType<typeof spawn> | null = null
   startNotificationMonitor()
 
   // ── Position helpers ───────────────────────────────────────────────────────
@@ -140,8 +141,14 @@ app.whenReady().then(() => {
     notifWin.setBounds({ x: bounds.x + bounds.width - 340, y: bounds.y + TASKBAR_H, width: 340, height: H })
   }
 
+  // ── Notification monitor ──────────────────────────────────────────────────
+
   function startNotificationMonitor(exe = 'py') {
-    const proc = spawn(exe, [scriptPath('notification-monitor.py')], { windowsHide: true })
+    const proc = spawn(exe, [scriptPath('notification-monitor.py')], {
+      windowsHide: true,
+      stdio: ['pipe', 'pipe', 'pipe'],  // explicit pipe so stdin.write() works
+    })
+    _notifProc = proc
 
     createInterface({ input: proc.stdout }).on('line', (line) => {
       try {
@@ -160,8 +167,18 @@ app.whenReady().then(() => {
     })
 
     proc.on('close', () => {
+      _notifProc = null
       setTimeout(() => { if (!notifWin.isDestroyed()) startNotificationMonitor(exe) }, 3000)
     })
+  }
+
+  function sendNotifCommand(cmd: object) {
+    if (_notifProc && !_notifProc.killed && _notifProc.stdin) {
+      try {
+        // Write as UTF-8 buffer + newline so Python's TextIOWrapper reads it cleanly
+        _notifProc.stdin.write(Buffer.from(JSON.stringify(cmd) + '\n', 'utf8'))
+      } catch { /* process may have closed */ }
+    }
   }
 
   // ── IPC: System stats ──────────────────────────────────────────────────────
@@ -179,9 +196,13 @@ app.whenReady().then(() => {
     drawerWin.focus()
     if (!notifWin.isDestroyed()) {
       syncNotifPosition()
-      notifWin.webContents.send('drawer:show', type)          // wake up NotificationCards
-      notifWin.webContents.send('drawer:height', drawerWin.getBounds().height)
-      notifWin.show()
+      const dh = drawerWin.getBounds().height
+      // The interactive zone starts at panelTop (drawer height + 6px gap).
+      // Computed here from the known drawer bounds — no renderer round-trip needed.
+      notifPanelTop = dh + 6
+      notifWin.webContents.send('drawer:show', type)
+      notifWin.webContents.send('drawer:height', dh)
+      notifWin.setIgnoreMouseEvents(false)
     }
   })
 
@@ -201,9 +222,12 @@ app.whenReady().then(() => {
   // Sent by React after its close animation finishes
   ipcMain.on('drawer:close', () => {
     drawerOpen = false
+    notifPanelTop = 0
     taskbarWin.webContents.send('drawer:closed')
     if (!drawerWin.isDestroyed()) drawerWin.hide()
-    if (!notifWin.isDestroyed()) notifWin.hide()
+    if (!notifWin.isDestroyed()) {
+      notifWin.setIgnoreMouseEvents(true, { forward: true })
+    }
   })
 
   // Resize drawer window to match actual card height — eliminates transparent dead zone
@@ -218,15 +242,14 @@ app.whenReady().then(() => {
       width: 340,
       height: clamped,
     })
+    // Keep notifPanelTop in sync as the drawer card grows/shrinks
+    notifPanelTop = clamped + 6
     // Tell the notif overlay how tall the drawer card is so it can CSS-position below it
-    if (!notifWin.isDestroyed() && notifWin.isVisible()) {
+    if (!notifWin.isDestroyed()) {
       notifWin.webContents.send('drawer:height', clamped)
     }
   })
 
-  // notification:resize is no longer used — notif window stays at fixed 480px height.
-  // Kept as a no-op so old IPC calls don't throw.
-  ipcMain.on('notification:resize', () => { /* no-op — window is fixed size */ })
 
   // ── IPC: Volume — writes directly to Python process stdin ──────────────────
 
@@ -325,17 +348,12 @@ app.whenReady().then(() => {
     })
   })
 
-  ipcMain.handle('clear-notifications', async (_e, appIds: string[]) => {
-    if (!appIds || appIds.length === 0) return
-    const uniqueIds = [...new Set(appIds.filter(Boolean))]
-    const psLines = [
-      `Add-Type -AssemblyName System.Runtime.WindowsRuntime`,
-      `$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]`,
-      `$history = [Windows.UI.Notifications.ToastNotificationManager]::History`,
-      ...uniqueIds.map(id => `try { $history.Clear('${id.replace(/'/g, "''")}') } catch {}`)
-    ].join("\n")
-    const encoded = Buffer.from(psLines, 'utf16le').toString('base64')
-    exec(`powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { windowsHide: true })
+  // ── IPC: Dismiss specific notifications by their WinRT notification IDs ──────
+  // Uses Python stdin to call UserNotificationListener.remove_notification(id)
+  // — precise removal, never affects other notifications from the same app.
+  ipcMain.handle('dismiss-notifications', (_e, ids: number[]) => {
+    if (!ids || ids.length === 0) return
+    sendNotifCommand({ cmd: 'remove', ids })
   })
 
   // ── IPC: WiFi ─────────────────────────────────────────────────────────────
@@ -507,11 +525,15 @@ app.whenReady().then(() => {
   let taskbarInteractActive: any = true
   let hitBox = { w: 160, h: 32 }
   let drawerOpen = false
+  // Pixel offset from notifWin top to where the interactive zone starts (drawer height + 6px gap).
+  // Set by drawer:open/drawer:resize. 0 = notifWin is hidden/inactive.
+  let notifPanelTop = 0
 
   ipcMain.on('set-hit-box', (_e, w: number, h: number) => { hitBox = { w, h } })
 
   let taskbarNeedsReassert = false
   let islandNeedsReassert  = false
+  let notifNeedsReassert   = false
 
   setInterval(() => {
     const { x, y } = screen.getCursorScreenPoint()
@@ -544,9 +566,21 @@ app.whenReady().then(() => {
       taskbarInteractActive = overTb
     }
 
-    if (!notifWin.isDestroyed() && notifWin.isVisible()) {
+    if (!notifWin.isDestroyed() && notifPanelTop > 0) {
       const nb = notifWin.getBounds()
-      const overNotif = x >= nb.x && x <= nb.x + nb.width && y >= nb.y && y <= nb.y + nb.height
+      // Interactive zone: full width, from panelTop downward.
+      // Above panelTop: click-through (drawer card area handled by drawerWin).
+      // Below panelTop: interactive — panel cards + transparent close-capture overlay.
+      const overNotif =
+        x >= nb.x && x <= nb.x + nb.width &&
+        y >= nb.y + notifPanelTop
+
+      if (overNotif && notifNeedsReassert) {
+        notifNeedsReassert = false
+        notifWin.setBounds({ width: nb.width + 1 })
+        notifWin.setBounds(nb)
+      }
+
       notifWin.setIgnoreMouseEvents(!overNotif, { forward: true })
     }
   }, 16)
@@ -558,6 +592,7 @@ app.whenReady().then(() => {
   function reassertWindows(tag?: string) {
     taskbarNeedsReassert = true
     islandNeedsReassert  = true
+    notifNeedsReassert   = true
 
     if (!taskbarWin.isDestroyed()) {
       taskbarWin.setAlwaysOnTop(true, 'pop-up-menu')
@@ -571,6 +606,12 @@ app.whenReady().then(() => {
       islandWin.moveTop()
     }
 
+    if (!notifWin.isDestroyed()) {
+      notifWin.setAlwaysOnTop(true, 'pop-up-menu')
+      notifWin.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      notifWin.moveTop()
+    }
+
     interactActive = null as any
     hoverActive = null as any
     taskbarInteractActive = null as any
@@ -582,7 +623,6 @@ app.whenReady().then(() => {
   powerMonitor.on('unlock-screen', onUnlock)
   powerMonitor.on('resume', onResume)
 
-  ipcMain.on('set-ignore-mouse', (_e, ignore: boolean) => islandWin.setIgnoreMouseEvents(ignore, { forward: true }))
   ipcMain.on('control-media', (_e, action: 'play-pause' | 'next' | 'prev', sourceAppId: string) => controlMedia(action, sourceAppId))
   ipcMain.on('switch-virtual-desktop', (_e, idx: number) => switchVirtualDesktop(idx))
 

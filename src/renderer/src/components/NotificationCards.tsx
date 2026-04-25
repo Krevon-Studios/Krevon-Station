@@ -46,19 +46,42 @@ function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+// ── App Icon cache (module-level — persists for the lifetime of the window) ───
+// Main process already caches via _notifIconCache Map, but going through IPC
+// on every card mount still costs a round-trip. This renderer-side cache makes
+// every repeat lookup O(1) with zero IPC overhead.
+const _iconCache = new Map<string, string | null>()
+// Pending map deduplicates concurrent fetches for the same appId so we only
+// fire one IPC call even if multiple cards mount simultaneously.
+const _iconPending = new Map<string, Promise<string | null>>()
+
+function fetchIcon(appId: string): Promise<string | null> {
+  if (_iconCache.has(appId)) return Promise.resolve(_iconCache.get(appId) ?? null)
+  if (_iconPending.has(appId)) return _iconPending.get(appId)!
+  const p = window.island.getNotifIcon(appId)
+    .then(url => { _iconCache.set(appId, url ?? null); return url ?? null })
+    .catch(() => { _iconCache.set(appId, null); return null })
+    .finally(() => _iconPending.delete(appId))
+  _iconPending.set(appId, p)
+  return p
+}
+
 // ── App Icon ──────────────────────────────────────────────────────────────────
 
 function AppIcon({ appId, appName }: { appId: string; appName: string }) {
-  const [icon, setIcon] = useState<string | null>(null)
   const color  = appColor(appName || appId)
   const letter = (appName || appId || '?')[0].toUpperCase()
+  // Seed from cache immediately — zero flash of letter avatar on repeat mounts
+  const [icon, setIcon] = useState<string | null>(() => _iconCache.get(appId) ?? null)
 
   useEffect(() => {
     if (!appId) return
+    if (_iconCache.has(appId)) {
+      setIcon(_iconCache.get(appId) ?? null)
+      return
+    }
     let cancelled = false
-    window.island.getNotifIcon(appId).then(url => {
-      if (!cancelled && url) setIcon(url)
-    }).catch(() => {})
+    fetchIcon(appId).then(url => { if (!cancelled) setIcon(url) })
     return () => { cancelled = true }
   }, [appId])
 
@@ -211,12 +234,11 @@ function ScrollArea({ children }: { children: React.ReactNode }) {
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export function NotificationCards() {
-  const [notifs, setNotifs]       = useState<WindowsNotification[]>([])
-  const [visible, setVisible]     = useState(false)
-  const [accentRgb, setAccentRgb] = useState('124,106,255')
-  const dndRef                    = useRef(false)
+  const [notifs, setNotifs] = useState<WindowsNotification[]>([])
+  const [visible, setVisible] = useState(false)
   // CSS top offset driven by drawer card height — zero Electron window movement
-  const [panelTop, setPanelTop]   = useState(60)
+  const [panelTop, setPanelTop] = useState(60)
+
 
   // ── Drawer open/close — controls panel visibility ─────────────────────────
   useEffect(() => {
@@ -239,12 +261,13 @@ export function NotificationCards() {
     const unsub = window.island.onNotifications((raw: unknown) => {
       const data = raw as {
         type: string; id?: number; appId?: string; appName?: string
-        title?: string; body?: string; enabled?: boolean
+        title?: string; body?: string
       }
-      if (data.type === 'dnd_state') { dndRef.current = !!data.enabled; return }
       if (data.type === 'added') {
-        if (dndRef.current) return
         const n = data as Required<typeof data>
+        // Pre-warm icon cache as soon as the notification arrives, before the
+        // card even mounts — eliminates the icon-loading lag on first display
+        if (n.appId) fetchIcon(n.appId)
         setNotifs(prev => {
           if (prev.some(x => x.id === n.id)) return prev
           return [
@@ -260,43 +283,45 @@ export function NotificationCards() {
     return unsub
   }, [])
 
-  // ── Accent color ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    window.island.getAccentColor().then(({ r, g, b }) => setAccentRgb(`${r},${g},${b}`))
-    const unsub = window.island.onAccentColor(({ r, g, b }) => setAccentRgb(`${r},${g},${b}`))
-    return unsub
-  }, [])
-
-  const dismiss = useCallback((id: number, appId: string) => {
+  const dismiss = useCallback((id: number) => {
     setNotifs(prev => prev.filter(n => n.id !== id))
-    if (appId) window.island.clearNotifications([appId])
+    // Precisely remove this one notification from the Action Center via WinRT
+    window.island.dismissNotifications([id])
   }, [])
 
   const clearAll = useCallback(() => {
-    const appIds = notifs.map(n => n.appId).filter(Boolean)
-    if (appIds.length > 0) window.island.clearNotifications(appIds)
+    const ids = notifs.map(n => n.id)
+    if (ids.length > 0) window.island.dismissNotifications(ids)
     setNotifs([])
   }, [notifs])
 
   const launchApp = useCallback((id: number, appId: string) => {
     if (appId) window.island.systemAction(`launch:${appId}`)
-    dismiss(id, appId)
+    dismiss(id)
   }, [dismiss])
 
   // Panel shows only when drawer is open AND there are notifications
   const showPanel = visible && notifs.length > 0
 
-  // Suppress unused variable warning — accentRgb used for future accent theming
-  void accentRgb
+
 
   return (
     // Full transparent overlay — identical structure to Drawer root
     <div className="w-full h-full relative pointer-events-none select-none">
+      {/* Click-capture overlay covering everything below the drawer */}
+      {visible && (
+        <div 
+          className="absolute left-0 right-0 bottom-0 pointer-events-auto"
+          style={{ top: panelTop }}
+          onClick={() => window.island.requestCloseDrawer()}
+        />
+      )}
       <AnimatePresence>
         {showPanel && (
           <motion.div
             key="notif-panel"
             className="absolute right-[8px] w-[320px] pointer-events-auto overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
             style={{
               top: panelTop,
               background: '#000000',
@@ -344,7 +369,7 @@ export function NotificationCards() {
                     <NotifCard
                       key={n.id}
                       n={n}
-                      onDismiss={() => dismiss(n.id, n.appId)}
+                      onDismiss={() => dismiss(n.id)}
                       onClick={() => launchApp(n.id, n.appId)}
                     />
                   ))}

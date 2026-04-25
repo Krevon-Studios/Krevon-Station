@@ -49,8 +49,6 @@ interface IslandAPI {
   switchVirtualDesktop: (targetIndex: number) => void
   controlMedia:       (action: 'play-pause' | 'next' | 'prev', sourceAppId: string) => void
   removeAllListeners: () => void
-  setIgnoreMouse:     (ignore: boolean) => void
-  setWindowSize:      (w: number, h: number) => void
   setHitBox:          (w: number, h: number) => void
   getSystemStats:     () => Promise<SystemStats>
   onSystemStats:      (cb: (data: SystemStats) => void) => () => void
@@ -89,9 +87,8 @@ interface IslandAPI {
   setDrawerHeight: (h: number)      => void
 
   // Notifications
-  onNotifications: (cb: (data: unknown) => void) => () => void
-  setNotifHeight:  (h: number) => void
-  clearNotifications: (appIds: string[]) => Promise<void>
+  onNotifications:      (cb: (data: unknown) => void) => () => void
+  dismissNotifications: (ids: number[]) => Promise<void>
 
   // Accent color
   getAccentColor: () => Promise<{ r: number; g: number; b: number }>

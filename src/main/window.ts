@@ -159,6 +159,8 @@ export function createNotificationWindow(): BrowserWindow {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   win.setIgnoreMouseEvents(true, { forward: true })
 
+  win.once('ready-to-show', () => win.show())
+
   return win
 }
 
