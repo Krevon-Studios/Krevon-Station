@@ -124,6 +124,44 @@ export function createDrawerWindow(): BrowserWindow {
   return win
 }
 
+export function createNotificationWindow(): BrowserWindow {
+  const { bounds } = buildBaseOptions()
+  const W = 340
+  // Full height from taskbar to screen bottom — prevents bottom clipping when drawer grows
+  const H = bounds.height - TASKBAR_H
+
+  const win = new BrowserWindow({
+    width:       W,
+    height:      H,
+    x:           bounds.x + bounds.width - W,
+    y:           bounds.y + TASKBAR_H,
+    frame:       false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    roundedCorners: false,
+    skipTaskbar: true,
+    resizable:   false,
+    maximizable: false,
+    minimizable: false,
+    focusable:   false,
+    hasShadow:   false,
+    show:        false,
+    icon:        buildIcon(),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    }
+  })
+
+  win.setAlwaysOnTop(true, 'pop-up-menu')
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  win.setIgnoreMouseEvents(true, { forward: true })
+
+  return win
+}
+
 function buildIcon(): Electron.NativeImage {
   const size = 16
   const buf = Buffer.alloc(size * size * 4)

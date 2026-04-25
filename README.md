@@ -14,6 +14,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 - **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
 - **Windows accent color theming** — all UI accents (pill indicators, drawer toggles, sliders, WiFi/audio active states) automatically match the Windows accent color set in Settings → Personalization → Colors; updates live without restart
 - **Interactive Control Drawer** — click the system tray icons to open a sleek, Framer Motion-animated control panel featuring a live WiFi network scanner and a real-time per-app audio mixer; click the avatar to jump directly to Windows Settings → Accounts
+- **Windows Notification Panel** — live Windows toast notifications appear in a scrollable panel below the drawer whenever it is open; cards show app icon, name, title, body, and arrival time; dismiss individually or clear all; clicking a card launches the source app; custom thin scrollbar with an animated scroll-indicator arrow; silky spring animation matching the drawer
 - **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
 - **Live system tray icons** — WiFi (4 signal levels), no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all highly optimized using hybrid event-listeners and polling
 - **Click-through** — mouse passes through the pill when not hovering; interactive on hover
@@ -35,6 +36,7 @@ A macOS-style Dynamic Island overlay for Windows, built with Electron + React. S
 | Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
 | Hook server | Express on `127.0.0.1:7823` |
 | System stats | Python 3 + `pycaw` + `psutil` + `wlanapi.dll` (hybrid event-driven architecture) |
+| Notifications | Python 3 + Windows Runtime (`Windows.UI.Notifications`) via `winrt` / SQLite WNF DB |
 
 ---
 
@@ -68,6 +70,7 @@ src/
 │   ├── system-stats.ts       # Spawns Python monitors, broadcasts system-stats IPC
 │   ├── audio-monitor.py      # Python — IAudioEndpointVolumeCallback COM callback (zero polling)
 │   ├── network-monitor.py    # Python — Hybrid: NotifyAddrChange + polling for signal strength
+│   ├── notification-monitor.py # Python — Windows Runtime toast notification watcher (WNF/SQLite)
 │   ├── wifi-scan.py          # Python — Native wlanapi.dll async network scanner
 │   ├── wifi-toggle.py        # Python — Native wlanapi.dll radio toggle (no admin required)
 │   ├── vendor/
@@ -83,7 +86,8 @@ src/
     ├── components/
     │   ├── Island.tsx        # All state UIs + media controls
     │   ├── Taskbar.tsx       # Full-width top bar — desktop dots + live system icons
-    │   └── Drawer.tsx        # Framer Motion animated WiFi & Audio control panel
+    │   ├── Drawer.tsx        # Framer Motion animated WiFi & Audio control panel
+    │   └── NotificationCards.tsx  # Live Windows notification panel with scroll & dismiss
     └── store/
         └── useIslandStore.ts # State machine + window resize logic
 ```
@@ -201,6 +205,29 @@ Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-st
 
 **Multi-Source Tracking:** When multiple media sources are active (e.g. Spotify and Chrome), users can cycle through them using interactive pagination dots in the pill. The app tracks the active session by its `sourceAppId` rather than index, preventing UI jumps when Windows dynamically re-orders the underlying session array based on recent playback. Auto-switching prioritizes actively playing sources automatically unless the user manually overrides it.
 
+### Notification System
+
+```
+notification-monitor.py (persistent Python process)
+    │
+    ├─ Reads Windows Notification SQLite DB
+    │      %LOCALAPPDATA%\Microsoft\Windows\Notifications\wpndatabase.db
+    │
+    ├─ Polls for new/removed toast notifications every ~2s
+    │      → emits JSON lines: { type, id, appId, appName, title, body, arrivalTime }
+    │
+    └─ stdout → createInterface readline → sendToNotifWin()
+                    │
+                    ▼ IPC: island:notifications
+              NotificationCards.tsx (notifWin renderer)
+                    │
+                    ├─ Adds cards to scrollable panel below drawer
+                    ├─ Dismiss button → clearNotifications() PS1 via IPC
+                    └─ Click card → systemAction('launch:<appId>')
+```
+
+The notification window is a full-height transparent overlay co-located with the drawer window. It is **never resized or repositioned during animations** — Framer Motion animates the panel entirely inside the fixed transparent Electron window. The panel's CSS `top` offset is updated via `drawer:height` IPC whenever the drawer card height changes, keeping it flush below the drawer card with no Electron window movement.
+
 ### Virtual Desktop Pagination
 
 ```
@@ -265,14 +292,21 @@ App start
 | `island:media` | Main → Renderer | `{ sessions: MediaSessionData[] }` |
 | `island:hover` | Main → Renderer | `boolean` |
 | `island:virtual-desktops` | Main → Renderer | `{ count: number, activeIndex: number }` |
+| `island:notifications` | Main → notifWin | `{ type, id, appId, appName, title, body, arrivalTime }` |
 | `system-stats` | Main → Renderer | `{ network: NetworkState, audio: AudioState }` |
+| `accent-color` | Main → All windows | `{ r, g, b }` |
+| `drawer:show` | Main → drawerWin + notifWin | `type: string` |
+| `drawer:force-close` | Main → drawerWin + notifWin | — |
+| `drawer:height` | Main → notifWin | `h: number` — current drawer card height for CSS panel positioning |
+| `drawer:resize` | notifWin → Main | `h: number` — sets drawer window height to match animated card |
 | `get-virtual-desktops` | Renderer → Main (invoke) | — returns `{ count, activeIndex }` |
 | `get-system-stats` | Renderer → Main (invoke) | — returns current `SystemStats` snapshot |
 | `scan-wifi-networks` | Renderer → Main (invoke) | — returns `WifiNetwork[]` |
 | `get-wifi-state` | Renderer → Main (invoke) | — returns `{ enabled: boolean }` |
 | `set-wifi-enabled` | Renderer → Main (invoke) | `enable: boolean` |
 | `connect-wifi` | Renderer → Main (invoke) | `ssid: string` |
-| `request-audio-sessions` | Renderer → Main (invoke) | — returns `AudioSessionInfo[]` |
+| `get-notif-icon` | notifWin → Main (invoke) | `appId: string` — returns base64 PNG or null |
+| `clear-notifications` | notifWin → Main (invoke) | `appIds: string[]` |
 | `set-session-volume` | Renderer → Main | `(pid, volume, muted)` |
 | `set-audio-device` | Renderer → Main | `deviceId: string` |
 | `switch-virtual-desktop` | Renderer → Main | `targetIndex: number` |
@@ -280,8 +314,7 @@ App start
 | `control-media` | Renderer → Main | `(action, sourceAppId)` |
 | `set-hit-box` | Renderer → Main | `(w, h)` |
 | `get-user-info` | Renderer → Main (invoke) | — returns `{ avatar: string\|null, name: string }` |
-| `system-action` | Renderer → Main (invoke) | `action: 'lock'\|'sleep'\|'restart'\|'shutdown'\|'screenshot'\|'settings'\|'profile'` |
-| `drawer:resize` | Renderer → Main | `h: number` — sets drawer window height to match animated card |
+| `system-action` | Renderer → Main (invoke) | `action: 'lock'\|'sleep'\|'restart'\|'shutdown'\|'screenshot'\|'settings'\|'profile'\|'launch:<appId>'` |
 
 ---
 
@@ -341,6 +374,7 @@ Unknown tools are title-cased from their snake_case name.
 - **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled over island hover zone and taskbar
 - **Session Restore** — DWM drops hit-test caching for transparent, non-focusable windows after sleep, lock screens, or exiting exclusive fullscreen apps. The app forces DWM to rebuild the interactive region using a lazy, hover-triggered 1px bounds resize.
 - **Registered App Bar** — the taskbar window is registered with the Windows shell via `SHAppBarMessage` so the OS reserves the top 32px and all apps/maximised windows respect it as unusable space; the bar survives display-metrics changes
+- **Notification overlay** — a separate full-height transparent `notifWin` sits co-located with the drawer window (same x/y anchor). It is never resized or repositioned during animations; Framer Motion handles all animation inside the fixed overlay, with CSS `top` offset updated via IPC to track the drawer card's current height
 
 ---
 
@@ -373,6 +407,12 @@ Unknown tools are title-cased from their snake_case name.
 - Ensure Python 3 is installed and on PATH: `python --version` or `py --version`
 - Ensure `pycaw` and `psutil` are installed: `pip install pycaw psutil`
 - Check the Electron console for `[audio:err]` or `[network:err]` lines
+
+**Notifications not appearing**
+- Ensure Python 3 is on PATH — the notification monitor is a persistent Python process
+- Open the drawer (click any system tray icon) — the notification panel only appears while the drawer is open
+- Notifications require at least one active Windows toast to display; check Action Center to confirm there are unread notifications
+- Check the Electron console for `[notif:err]` lines
 
 **VPN key icon not showing**
 - The VPN icon appears when any active network adapter name contains a known VPN keyword (TAP, TUN, WireGuard, NordVPN, ExpressVPN, ProtonVPN, Mullvad, OpenVPN, Cisco AnyConnect, GlobalProtect, etc.)

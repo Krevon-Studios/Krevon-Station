@@ -62,6 +62,7 @@ interface IslandAPI {
   onDrawerShow:       (cb: (type: string) => void) => () => void
   onDrawerClosed:     (cb: () => void) => () => void
   onDrawerForceClose: (cb: () => void) => () => void
+  onDrawerHeight:     (cb: (h: number) => void) => () => void
 
   // Audio control
   setSystemVolume:  (volume: number)                                => Promise<void>
@@ -72,6 +73,7 @@ interface IslandAPI {
   setAudioDevice:   (deviceId: string)                              => Promise<void>
   setSessionVolume: (pid: number, volume?: number, muted?: boolean) => Promise<void>
   getAppIcon:       (pid: number)                                    => Promise<string | null>
+  getNotifIcon:     (appId: string)                                  => Promise<string | null>
 
   // WiFi control
   scanWifiNetworks: (force?: boolean)   => Promise<WifiNetwork[]>
@@ -85,6 +87,11 @@ interface IslandAPI {
 
   // Drawer sizing
   setDrawerHeight: (h: number)      => void
+
+  // Notifications
+  onNotifications: (cb: (data: unknown) => void) => () => void
+  setNotifHeight:  (h: number) => void
+  clearNotifications: (appIds: string[]) => Promise<void>
 
   // Accent color
   getAccentColor: () => Promise<{ r: number; g: number; b: number }>

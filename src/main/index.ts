@@ -1,5 +1,5 @@
 import { app, ipcMain, screen, powerMonitor, systemPreferences } from 'electron'
-import { createIslandWindow, createTaskbarWindow, createDrawerWindow, TASKBAR_H } from './window'
+import { createIslandWindow, createTaskbarWindow, createDrawerWindow, createNotificationWindow, TASKBAR_H } from './window'
 import { startHookServer } from './hook-server'
 import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
@@ -7,6 +7,7 @@ import { createTray } from './tray'
 import { attachAppBar } from './appbar'
 import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice, scriptPath } from './system-stats'
 import { spawn, exec } from 'child_process'
+import { createInterface } from 'readline'
 
 app.setName('Dynamic Island')
 
@@ -21,6 +22,7 @@ app.whenReady().then(() => {
   const taskbarWin = createTaskbarWindow()
   const islandWin = createIslandWindow()
   const drawerWin = createDrawerWindow()
+  const notifWin  = createNotificationWindow()
   let appBarRect = { left: 0, top: 0, right: 0, bottom: 32 }
   let taskbarShown = false
 
@@ -43,6 +45,7 @@ app.whenReady().then(() => {
           drawerWin.setIgnoreMouseEvents(true, { forward: true })
           drawerWin.webContents.send('drawer:force-close')
         }
+        if (!notifWin.isDestroyed()) notifWin.hide()
       } else {
         taskbarWin.setOpacity(1); islandWin.setOpacity(1)
         islandWin.setAlwaysOnTop(true, 'pop-up-menu')
@@ -56,7 +59,7 @@ app.whenReady().then(() => {
 
   // ── Accent color ───────────────────────────────────────────────────────────
 
-  const allWins = [taskbarWin, islandWin, drawerWin]
+  const allWins = [taskbarWin, islandWin, drawerWin, notifWin]
 
   function parseAccent() {
     const raw = systemPreferences.getAccentColor()
@@ -81,6 +84,30 @@ app.whenReady().then(() => {
   startSystemStatsWatcher([taskbarWin, drawerWin])
   createTray([taskbarWin, islandWin])
 
+  // Buffer notifications that arrive before notifWin renderer is ready
+  let notifWinReady = false
+  const notifBuffer: object[] = []
+
+  notifWin.webContents.once('did-finish-load', () => {
+    notifWinReady = true
+    // Replay any notifications buffered before the renderer finished loading
+    for (const evt of notifBuffer) {
+      if (!notifWin.isDestroyed()) notifWin.webContents.send('island:notifications', evt)
+    }
+    notifBuffer.length = 0
+  })
+
+  function sendToNotifWin(data: object) {
+    if (notifWin.isDestroyed()) return
+    if (notifWinReady) {
+      notifWin.webContents.send('island:notifications', data)
+    } else {
+      notifBuffer.push(data)
+    }
+  }
+
+  startNotificationMonitor()
+
   // ── Position helpers ───────────────────────────────────────────────────────
 
   function pinIslandToTop(retriesLeft = 5) {
@@ -103,6 +130,40 @@ app.whenReady().then(() => {
     drawerWin.setBounds({ x: bounds.x + bounds.width - W, y: bounds.y + TASKBAR_H, width: W, height: H })
   }
 
+  function syncNotifPosition() {
+    // Notif window spans full available height from TASKBAR_H to screen bottom.
+    // The React panel positions itself inside via CSS `top`. This prevents bottom clipping
+    // when the drawer grows and pushes the panel down.
+    if (notifWin.isDestroyed()) return
+    const { bounds } = screen.getPrimaryDisplay()
+    const H = bounds.height - TASKBAR_H
+    notifWin.setBounds({ x: bounds.x + bounds.width - 340, y: bounds.y + TASKBAR_H, width: 340, height: H })
+  }
+
+  function startNotificationMonitor(exe = 'py') {
+    const proc = spawn(exe, [scriptPath('notification-monitor.py')], { windowsHide: true })
+
+    createInterface({ input: proc.stdout }).on('line', (line) => {
+      try {
+        const data = JSON.parse(line.trim())
+        sendToNotifWin(data)
+      } catch { /* malformed line */ }
+    })
+
+    proc.stderr.on('data', (d: Buffer) => {
+      const msg = d.toString().trim()
+      if (msg) console.error('[notif:err]', msg)
+    })
+
+    proc.on('error', () => {
+      if (exe === 'py') setTimeout(() => startNotificationMonitor('python'), 1000)
+    })
+
+    proc.on('close', () => {
+      setTimeout(() => { if (!notifWin.isDestroyed()) startNotificationMonitor(exe) }, 3000)
+    })
+  }
+
   // ── IPC: System stats ──────────────────────────────────────────────────────
 
   ipcMain.handle('get-system-stats', () => getCachedSystemStats())
@@ -116,17 +177,25 @@ app.whenReady().then(() => {
     drawerWin.webContents.send('drawer:show', type)
     drawerWin.show()
     drawerWin.focus()
+    if (!notifWin.isDestroyed()) {
+      syncNotifPosition()
+      notifWin.webContents.send('drawer:show', type)          // wake up NotificationCards
+      notifWin.webContents.send('drawer:height', drawerWin.getBounds().height)
+      notifWin.show()
+    }
   })
 
   drawerWin.on('blur', () => {
     if (drawerOpen && !drawerWin.isDestroyed()) {
       drawerWin.webContents.send('drawer:force-close')
+      if (!notifWin.isDestroyed()) notifWin.webContents.send('drawer:force-close')
     }
   })
 
-  // Sent by taskbar/external callers — tells React to animate-close, which then sends drawer:close
+  // Sent by taskbar/external callers
   ipcMain.on('drawer:request-close', () => {
     if (!drawerWin.isDestroyed()) drawerWin.webContents.send('drawer:force-close')
+    if (!notifWin.isDestroyed()) notifWin.webContents.send('drawer:force-close')
   })
 
   // Sent by React after its close animation finishes
@@ -134,19 +203,30 @@ app.whenReady().then(() => {
     drawerOpen = false
     taskbarWin.webContents.send('drawer:closed')
     if (!drawerWin.isDestroyed()) drawerWin.hide()
+    if (!notifWin.isDestroyed()) notifWin.hide()
   })
 
   // Resize drawer window to match actual card height — eliminates transparent dead zone
+  // Notification window is NOT touched here — it stays fixed at its permanent bounds.
   ipcMain.on('drawer:resize', (_e, h: number) => {
     if (drawerWin.isDestroyed()) return
     const { bounds } = screen.getPrimaryDisplay()
+    const clamped = Math.max(Math.ceil(h), 60)
     drawerWin.setBounds({
       x: bounds.x + bounds.width - 340,
       y: bounds.y + TASKBAR_H,
       width: 340,
-      height: Math.max(Math.ceil(h), 60),
+      height: clamped,
     })
+    // Tell the notif overlay how tall the drawer card is so it can CSS-position below it
+    if (!notifWin.isDestroyed() && notifWin.isVisible()) {
+      notifWin.webContents.send('drawer:height', clamped)
+    }
   })
+
+  // notification:resize is no longer used — notif window stays at fixed 480px height.
+  // Kept as a no-op so old IPC calls don't throw.
+  ipcMain.on('notification:resize', () => { /* no-op — window is fixed size */ })
 
   // ── IPC: Volume — writes directly to Python process stdin ──────────────────
 
@@ -196,6 +276,66 @@ app.whenReady().then(() => {
     } catch {
       return null
     }
+  })
+
+  // ── IPC: Notification app icon by AUMID (UWP package icon) ────────────────
+  const _notifIconCache = new Map<string, string | null>()
+
+  ipcMain.handle('get-notif-icon', async (_e, appId: string) => {
+    if (!appId) return null
+    if (_notifIconCache.has(appId)) return _notifIconCache.get(appId) ?? null
+
+    return new Promise<string | null>((resolve) => {
+      // Extract Package Family Name from AUMID (Publisher.AppName_Hash!EntryPoint)
+      const pfn = (appId.split('!')[0] ?? appId).replace(/'/g, "''")
+
+      // Build PS script as a plain string — no JS interpolation inside the PS body
+      const psLines = [
+        `$pfn = '${pfn}'`,
+        `$pkg = Get-AppxPackage | Where-Object { $_.PackageFamilyName -eq $pfn } | Select-Object -First 1`,
+        `if (-not $pkg) { Write-Output ''; exit }`,
+        `try {`,
+        `  [xml]$m = Get-Content "$($pkg.InstallLocation)\\AppxManifest.xml" -EA Stop`,
+        `  $logo = $m.Package.Applications.Application.VisualElements.Square44x44Logo`,
+        `  if (-not $logo) { $logo = $m.Package.Properties.Logo }`,
+        `  $base = Join-Path $pkg.InstallLocation $logo`,
+        `  $found = $null`,
+        // Use a PS foreach with $scale var — no JS template interpolation here
+        `  foreach ($scale in @('scale-100','scale-150','scale-200','')) {`,
+        `    $candidate = if ($scale) { $base -replace '\\.png$',("." + $scale + ".png") } else { $base }`,
+        `    if (Test-Path $candidate) { $found = $candidate; break }`,
+        `  }`,
+        `  if ($found) { $b = [System.IO.File]::ReadAllBytes($found); Write-Output ('data:image/png;base64,' + [Convert]::ToBase64String($b)) }`,
+        `  else { Write-Output '' }`,
+        `} catch { Write-Output '' }`,
+      ].join("\n")
+
+      // Use -EncodedCommand to avoid all shell-quoting issues
+      const encoded = Buffer.from(psLines, 'utf16le').toString('base64')
+
+      exec(
+        `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`,
+        { windowsHide: true, timeout: 10000 } as any,
+        (_err: Error | null, stdout: string) => {
+          const result = stdout.trim() || null
+          _notifIconCache.set(appId, result)
+          resolve(result)
+        }
+      )
+    })
+  })
+
+  ipcMain.handle('clear-notifications', async (_e, appIds: string[]) => {
+    if (!appIds || appIds.length === 0) return
+    const uniqueIds = [...new Set(appIds.filter(Boolean))]
+    const psLines = [
+      `Add-Type -AssemblyName System.Runtime.WindowsRuntime`,
+      `$null = [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime]`,
+      `$history = [Windows.UI.Notifications.ToastNotificationManager]::History`,
+      ...uniqueIds.map(id => `try { $history.Clear('${id.replace(/'/g, "''")}') } catch {}`)
+    ].join("\n")
+    const encoded = Buffer.from(psLines, 'utf16le').toString('base64')
+    exec(`powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { windowsHide: true })
   })
 
   // ── IPC: WiFi ─────────────────────────────────────────────────────────────
@@ -350,6 +490,13 @@ app.whenReady().then(() => {
       case 'screenshot': exec('explorer.exe ms-screenclip:', { windowsHide: true }); break
       case 'settings': exec('explorer.exe ms-settings:', { windowsHide: true }); break
       case 'profile': exec('explorer.exe ms-settings:yourinfo', { windowsHide: true }); break
+      default:
+        if (action.startsWith('launch:')) {
+          const appId = action.slice(7)
+          if (appId.includes('!')) exec(`explorer.exe shell:AppsFolder\\${appId}`, { windowsHide: true })
+          else exec(`explorer.exe "${appId}"`, { windowsHide: true })
+        }
+        break
     }
   })
 
@@ -396,6 +543,12 @@ app.whenReady().then(() => {
       taskbarWin.setIgnoreMouseEvents(!overTb, { forward: true })
       taskbarInteractActive = overTb
     }
+
+    if (!notifWin.isDestroyed() && notifWin.isVisible()) {
+      const nb = notifWin.getBounds()
+      const overNotif = x >= nb.x && x <= nb.x + nb.width && y >= nb.y && y <= nb.y + nb.height
+      notifWin.setIgnoreMouseEvents(!overNotif, { forward: true })
+    }
   }, 16)
 
   // After Windows lock/unlock/fullscreen, DWM caches hit-test bounds for transparent
@@ -441,6 +594,7 @@ app.whenReady().then(() => {
     const { bounds } = screen.getPrimaryDisplay()
     islandWin.setBounds({ x: bounds.x + Math.floor((bounds.width - islandWin.getBounds().width) / 2), y: bounds.y, width: islandWin.getBounds().width, height: islandWin.getBounds().height })
     syncDrawerPosition()
+    syncNotifPosition()
   }
   screen.on('display-metrics-changed', handleDisplayChange)
   screen.on('display-added', handleDisplayChange)
@@ -452,10 +606,12 @@ app.whenReady().then(() => {
     taskbarWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=taskbar`)
     islandWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=island`)
     drawerWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=drawer`)
+    notifWin.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?view=notifications`)
   } else {
     taskbarWin.loadFile('out/renderer/index.html', { search: 'view=taskbar' })
     islandWin.loadFile('out/renderer/index.html', { search: 'view=island' })
     drawerWin.loadFile('out/renderer/index.html', { search: 'view=drawer' })
+    notifWin.loadFile('out/renderer/index.html', { search: 'view=notifications' })
   }
 
   // ── Cleanup ────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-﻿import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('island', {
   onSessionStart: (cb: (data: unknown) => void) => {
@@ -43,6 +43,14 @@ contextBridge.exposeInMainWorld('island', {
   controlMedia: (action: 'play-pause' | 'next' | 'prev', sourceAppId: string) =>
     ipcRenderer.send('control-media', action, sourceAppId),
 
+  onNotifications: (cb: (data: unknown) => void) => {
+    const fn = (_e: any, d: unknown) => cb(d)
+    ipcRenderer.on('island:notifications', fn)
+    return () => ipcRenderer.removeListener('island:notifications', fn)
+  },
+
+  setNotifHeight: (h: number): void => ipcRenderer.send('notification:resize', h),
+
   removeAllListeners: () => {
     ipcRenderer.removeAllListeners('island:session-start')
     ipcRenderer.removeAllListeners('island:tool-active')
@@ -50,6 +58,7 @@ contextBridge.exposeInMainWorld('island', {
     ipcRenderer.removeAllListeners('island:media')
     ipcRenderer.removeAllListeners('island:virtual-desktops')
     ipcRenderer.removeAllListeners('island:hover')
+    ipcRenderer.removeAllListeners('island:notifications')
     ipcRenderer.removeAllListeners('system-stats')
     ipcRenderer.removeAllListeners('drawer:show')
     ipcRenderer.removeAllListeners('drawer:closed')
@@ -93,6 +102,12 @@ contextBridge.exposeInMainWorld('island', {
     return () => ipcRenderer.removeListener('drawer:force-close', fn)
   },
 
+  onDrawerHeight: (cb: (h: number) => void) => {
+    const fn = (_e: any, h: number) => cb(h)
+    ipcRenderer.on('drawer:height', fn)
+    return () => ipcRenderer.removeListener('drawer:height', fn)
+  },
+
   // ── Audio control ──────────────────────────────────────────────────────────
   setSystemVolume:  (volume: number)                                    => ipcRenderer.invoke('set-system-volume', volume),
   setSystemMute:    (mute: boolean)                                     => ipcRenderer.invoke('set-system-mute', mute),
@@ -102,6 +117,8 @@ contextBridge.exposeInMainWorld('island', {
   setAudioDevice:   (deviceId: string)                                  => ipcRenderer.invoke('set-audio-device', deviceId),
   setSessionVolume: (pid: number, volume?: number, muted?: boolean)     => ipcRenderer.invoke('set-session-volume', pid, volume, muted),
   getAppIcon:       (pid: number)                                       => ipcRenderer.invoke('get-app-icon', pid),
+  getNotifIcon:     (appId: string)                                     => ipcRenderer.invoke('get-notif-icon', appId),
+  clearNotifications: (appIds: string[])                                => ipcRenderer.invoke('clear-notifications', appIds),
 
   // ── WiFi control ───────────────────────────────────────────────────────────
   scanWifiNetworks: ()                   => ipcRenderer.invoke('scan-wifi-networks'),

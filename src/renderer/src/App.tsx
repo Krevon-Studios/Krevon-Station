@@ -1,6 +1,7 @@
-import { Island }  from './components/Island'
-import { Taskbar } from './components/Taskbar'
-import { Drawer }  from './components/Drawer'
+import { Island }             from './components/Island'
+import { Taskbar }            from './components/Taskbar'
+import { Drawer }             from './components/Drawer'
+import { NotificationCards }  from './components/NotificationCards'
 
 export default function App() {
   const view = new URLSearchParams(window.location.search).get('view') ?? 'island'
@@ -17,6 +18,14 @@ export default function App() {
     return (
       <div className="w-full h-full overflow-hidden">
         <Drawer />
+      </div>
+    )
+  }
+
+  if (view === 'notifications') {
+    return (
+      <div className="w-full h-full overflow-hidden">
+        <NotificationCards />
       </div>
     )
   }
