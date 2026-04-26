@@ -1,7 +1,11 @@
 {
   "name": "krevon-station",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Krevon Station — macOS-style Dynamic Island overlay for Windows",
+  "author": {
+    "name": "Krevon Studios",
+    "url": "https://github.com/Krevon-Studios"
+  },
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
