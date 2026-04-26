@@ -93,29 +93,145 @@ Dev mode spawns raw `.py` scripts directly via `py`. Python + packages must be o
 ## Build Pipeline
 
 ### 1. Compile Python helpers
-Run whenever `.py` files change:
+Run whenever any `.py` file changes:
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\compile-python.ps1
 ```
 
 Outputs `resources/python/audio-monitor.exe`, `network-monitor.exe`, `notification-monitor.exe`, `wifi-scan.exe`, `wifi-toggle.exe`.
 
-Commit these — they are bundled by `electron-builder` via `extraResources`.
+**These `.exe` files must be committed** — `electron-builder` picks them up via `extraResources` and ships them inside the installer. End users get no Python required.
 
-**Why `--collect-all` flags matter:** `pycaw` uses `comtypes` which generates COM type-library wrappers at build time. Without `--collect-all=comtypes`, the stubs are missing on other machines and all COM callbacks fail silently. Same logic applies to `psutil` (binary extensions) and `winrt` (namespace packages).
+**Why `--collect-all` flags matter:** `pycaw` uses `comtypes` which generates COM type-library wrappers at build time. Without `--collect-all=comtypes` those stubs are absent on other machines and COM callbacks fail silently. Same applies to `psutil` (binary extensions) and `winrt` (namespace packages).
+
+**Why no `--noconsole`:** Without `--noconsole`, PyInstaller uses `run.exe` (console-mode bootloader) which keeps `sys.stdout` valid — essential because Electron reads each helper's stdout as a JSON line stream. `windowsHide: true` in Node's `spawn()` already passes `CREATE_NO_WINDOW` to Windows so no console window ever flashes. All scripts also guard against `sys.stdout is None` at the top as a safety net.
 
 ### 2. Build installer
 ```bash
-bun run build   # compile TS + React → out/
-bun run start   # optional: preview packaged build locally
-bun run dist    # package → dist/Krevon Station Setup <version>.exe
+bun run build       # compile TS + React → out/
+bun run start       # optional: smoke-test the packaged build locally
+bun run dist        # package → dist/Krevon Station Setup <version>.exe
 ```
 
 ### 3. Release a new version
-1. Bump `"version"` in `package.json`
-2. Set `owner` in `electron-builder.yml` → `publish` block to your GitHub username
-3. `$env:GH_TOKEN = "ghp_..."`
-4. `bun run dist` — uploads installer + `latest.yml` to GitHub Releases
+```powershell
+# 1. Bump version
+#    Edit "version" in package.json  e.g. "1.0.0" → "1.0.1"
+
+# 2. Recompile Python helpers if any .py changed
+powershell -ExecutionPolicy Bypass -File scripts\compile-python.ps1
+
+# 3. Set your GitHub token (needs repo scope)
+$env:GH_TOKEN = "ghp_..."
+
+# 4. Build + publish — creates GitHub Release, uploads installer + latest.yml
+bun run dist --publish always
+```
+
+Installed copies poll `latest.yml` on next launch and auto-download the update.
+
+---
+
+## Adding a New Python Helper
+
+Follow this checklist whenever you add a new Python monitor/helper script.
+
+### Step 1 — Write the script
+
+Create `src/main/your-helper.py`. Add the stdout guard at the very top (before any other imports) so it works in both dev mode and packaged builds:
+
+```python
+import sys
+import io
+
+# PyInstaller --noconsole sets sys.stdout/stderr to None even when Electron
+# pipes them. Re-attach to the raw file descriptors so print() works.
+if sys.stdout is None:
+    sys.stdout = io.TextIOWrapper(io.FileIO(1, closefd=False), encoding='utf-8', line_buffering=True)
+if sys.stderr is None:
+    sys.stderr = io.TextIOWrapper(io.FileIO(2, closefd=False), encoding='utf-8', line_buffering=True)
+
+# your imports here...
+```
+
+Communicate with Electron exclusively via **stdout** (JSON lines) and **stdin** (JSON commands). Never open GUI windows or show dialogs.
+
+### Step 2 — Register it in the compile script
+
+Open `scripts/compile-python.ps1` and add an entry to `$scriptConfig`:
+
+```powershell
+"your-helper.py" = @(
+    "--collect-all=some-package",      # add any packages with dynamic imports
+    "--hidden-import=some.submodule"   # add any imports PyInstaller misses
+)
+```
+
+**Rule of thumb for flags:**
+| Situation | Flag to add |
+|---|---|
+| Package uses COM / type-library generation (e.g. `comtypes`, `pycaw`) | `--collect-all=<package>` |
+| Package has platform-specific binary extensions (e.g. `psutil`) | `--collect-all=<package>` |
+| Package is a namespace package with dynamic sub-modules (e.g. `winrt`) | `--collect-all=<package>` |
+| Import only reachable at runtime via string / `__import__` | `--hidden-import=<module>` |
+| Pure Python, no dynamic loading | No extra flags needed |
+
+### Step 3 — Add to electron-builder extraResources
+
+Open `electron-builder.yml` and add two lines under `extraResources`:
+
+```yaml
+  - from: resources/python/your-helper.exe
+    to: your-helper.exe
+```
+
+### Step 4 — Spawn it from the main process
+
+In `src/main/system-stats.ts` (or `index.ts` for one-off processes) use the existing `spawnPython` helper:
+
+```typescript
+// Persistent monitor — auto-restarts on exit
+spawnPython(
+  'your-helper',      // matches your-helper.exe / your-helper.py (no extension)
+  'your-helper',      // label used in console logs: [your-helper:err]
+  (line) => {
+    // called for every stdout line the script emits
+    try {
+      const d = JSON.parse(line)
+      // handle d ...
+    } catch { /* ignore malformed lines */ }
+  },
+  () => { /* called when process exits — spawnPython handles restart */ }
+)
+```
+
+Or for one-shot scripts (like `wifi-scan`) spawn directly with `spawn()` and read stdout on close.
+
+`spawnPython` automatically resolves the right executable:
+- **Packaged** → `process.resourcesPath/your-helper.exe`
+- **Dev** → `py src/main/your-helper.py` (falls back to `python` if `py` not found)
+
+### Step 5 — Expose data to the renderer (if needed)
+
+- Add your data shape to the relevant `interface` in `system-stats.ts` (or create a new one in `types.ts`)
+- Broadcast via `win.webContents.send('your-channel', data)` from the main process
+- Add the channel to the `window.island` API in `src/preload/index.ts`
+- Declare the type in `src/renderer/src/env.d.ts`
+- Listen in the renderer with `window.island.on('your-channel', handler)`
+
+### Step 6 — Compile, commit, test
+
+```powershell
+# Compile the new exe
+powershell -ExecutionPolicy Bypass -File scripts\compile-python.ps1
+
+# Commit the new source + compiled exe
+git add src/main/your-helper.py resources/python/your-helper.exe scripts/compile-python.ps1 electron-builder.yml
+git commit -m "feat: add your-helper Python monitor"
+
+# Build and smoke-test
+bun run build && bun run start
+```
 
 ---
 
