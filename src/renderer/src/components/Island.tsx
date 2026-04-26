@@ -87,7 +87,7 @@ function IdleExpandedContent() {
       </div>
       <div className="flex items-center gap-[6px]">
         <div className="w-[2px] h-[2px] rounded-full" style={{ background: 'rgb(var(--accent-soft-rgb))' }} />
-        <span className="text-[11px] text-white/30 tracking-wide">Dynamic Island</span>
+        <span className="text-[11px] text-white/30 tracking-wide">Krevon Station</span>
       </div>
     </motion.div>
   )

@@ -147,14 +147,28 @@ export function scriptPath(name: string): string {
     : path.join(app.getAppPath(), 'src/main', name)
 }
 
+export function getPythonExe(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'python', 'python.exe')
+    : 'py'
+}
+
 function spawnPython(
-  script: string,
+  scriptName: string, // e.g. 'audio-monitor'
   label: string,
   onLine: (line: string) => void,
   onStop: () => void,
-  exe = 'py'
+  exeFallback = 'py'
 ): ChildProcessWithoutNullStreams {
-  const proc = spawn(exe, [script], { windowsHide: true })
+  const isPackaged = app.isPackaged
+  const exe = isPackaged
+    ? path.join(process.resourcesPath, `${scriptName}.exe`)
+    : exeFallback
+  const args = isPackaged
+    ? []
+    : [path.join(app.getAppPath(), 'src/main', `${scriptName}.py`)]
+
+  const proc = spawn(exe, args, { windowsHide: true })
 
   proc.stderr.on('data', (d: Buffer) => {
     const msg = d.toString().trim()
@@ -165,8 +179,8 @@ function spawnPython(
     .on('line', onLine)
 
   proc.on('error', (err) => {
-    if (exe === 'py') {
-      setTimeout(() => spawnPython(script, label, onLine, onStop, 'python'), 300)
+    if (!isPackaged && exeFallback === 'py') {
+      setTimeout(() => spawnPython(scriptName, label, onLine, onStop, 'python'), 300)
     } else {
       console.error(`[${label}] spawn error: ${err.message}`)
       setTimeout(onStop, 3000)
@@ -197,10 +211,10 @@ export function startSystemStatsWatcher(windows: BrowserWindow[]): () => void {
 
   // ── Audio ──────────────────────────────────────────────────────────────
 
-  function startAudio(exe = 'py') {
+  function startAudio(exeFallback = 'py') {
     if (stopped) return
     const proc = spawnPython(
-      scriptPath('audio-monitor.py'), 'audio',
+      'audio-monitor', 'audio',
       (line) => {
         if (!line.startsWith('{')) return
         try {
@@ -224,18 +238,18 @@ export function startSystemStatsWatcher(windows: BrowserWindow[]): () => void {
           }})
         } catch { /* ignore */ }
       },
-      () => { if (!stopped) startAudio(exe) },
-      exe
+      () => { if (!stopped) startAudio(exeFallback) },
+      exeFallback
     )
     _audioProc = proc
   }
 
   // ── Network ────────────────────────────────────────────────────────────
 
-  function startNetwork(exe = 'py') {
+  function startNetwork(exeFallback = 'py') {
     if (stopped) return
     spawnPython(
-      scriptPath('network-monitor.py'), 'network',
+      'network-monitor', 'network',
       (line) => {
         if (!line.startsWith('{')) return
         try {
@@ -249,8 +263,8 @@ export function startSystemStatsWatcher(windows: BrowserWindow[]): () => void {
           }})
         } catch { /* ignore */ }
       },
-      () => { if (!stopped) startNetwork(exe) },
-      exe
+      () => { if (!stopped) startNetwork(exeFallback) },
+      exeFallback
     )
   }
 

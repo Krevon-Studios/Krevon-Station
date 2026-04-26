@@ -5,11 +5,13 @@ import { startMediaWatcher, controlMedia } from './media-watcher'
 import { startDesktopWatcher, switchVirtualDesktop } from './desktop-watcher'
 import { createTray } from './tray'
 import { attachAppBar } from './appbar'
-import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice, scriptPath } from './system-stats'
+import { startSystemStatsWatcher, getCachedSystemStats, setAudioVolume, setAudioMute, requestAudioSessions, setSessionVolume, requestAudioDevices, setAudioDevice, scriptPath, getPythonExe } from './system-stats'
+import { initAutoUpdater } from './auto-update'
 import { spawn, exec } from 'child_process'
+import path from 'path'
 import { createInterface } from 'readline'
 
-app.setName('Dynamic Island')
+app.setName('Krevon Station')
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -83,6 +85,7 @@ app.whenReady().then(() => {
   startDesktopWatcher(taskbarWin)
   startSystemStatsWatcher([taskbarWin, drawerWin])
   createTray([taskbarWin, islandWin])
+  initAutoUpdater([taskbarWin, islandWin])
 
   // Buffer notifications that arrive before notifWin renderer is ready
   let notifWinReady = false
@@ -143,8 +146,10 @@ app.whenReady().then(() => {
 
   // ── Notification monitor ──────────────────────────────────────────────────
 
-  function startNotificationMonitor(exe = 'py') {
-    const proc = spawn(exe, [scriptPath('notification-monitor.py')], {
+  function startNotificationMonitor(exeFallback = 'py') {
+    const exe = app.isPackaged ? path.join(process.resourcesPath, 'notification-monitor.exe') : exeFallback
+    const args = app.isPackaged ? [] : [scriptPath('notification-monitor.py')]
+    const proc = spawn(exe, args, {
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],  // explicit pipe so stdin.write() works
     })
@@ -163,12 +168,12 @@ app.whenReady().then(() => {
     })
 
     proc.on('error', () => {
-      if (exe === 'py') setTimeout(() => startNotificationMonitor('python'), 1000)
+      if (!app.isPackaged && exeFallback === 'py') setTimeout(() => startNotificationMonitor('python'), 1000)
     })
 
     proc.on('close', () => {
       _notifProc = null
-      setTimeout(() => { if (!notifWin.isDestroyed()) startNotificationMonitor(exe) }, 3000)
+      setTimeout(() => { if (!notifWin.isDestroyed()) startNotificationMonitor(exeFallback) }, 3000)
     })
   }
 
@@ -363,10 +368,12 @@ app.whenReady().then(() => {
     // ctypes, the same path Windows Settings takes. It triggers WlanScan,
     // waits for results, then returns a JSON array via stdout.
     return new Promise<{ ssid: string; signal: number; secured: boolean; connected: boolean }[]>((resolve) => {
-      const script = scriptPath('wifi-scan.py')
-      const args = force ? [script] : [script, '--no-scan']
-      const tryExe = (exe: string) => {
-        const proc = spawn(exe, args, { windowsHide: true })
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'wifi-scan.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('wifi-scan.py')]
+      const args = force ? baseArgs : [...baseArgs, '--no-scan']
+      
+      const tryExe = (currentExe: string) => {
+        const proc = spawn(currentExe, args, { windowsHide: true })
         let stdout = ''
         proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
         proc.stderr.on('data', (d: Buffer) => {
@@ -377,20 +384,23 @@ app.whenReady().then(() => {
           try { resolve(JSON.parse(stdout.trim())) } catch { resolve([]) }
         })
         proc.on('error', () => {
-          if (exe === 'py') tryExe('python')
+          if (!app.isPackaged && currentExe === 'py') tryExe('python')
           else resolve([])
         })
       }
-      tryExe('py')
+      tryExe(exe)
     })
   })
 
   ipcMain.handle('set-wifi-enabled', async (_e, enable: boolean) => {
     return new Promise<void>((resolve) => {
-      const script = scriptPath('wifi-toggle.py')
-      exec(`py "${script}" ${enable ? '--enable' : '--disable'}`, { windowsHide: true }, () => {
-        resolve()
-      })
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'wifi-toggle.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('wifi-toggle.py')]
+      const args = [...baseArgs, enable ? '--enable' : '--disable']
+      
+      const proc = spawn(exe, args, { windowsHide: true })
+      proc.on('close', () => resolve())
+      proc.on('error', () => resolve())
     })
   })
 

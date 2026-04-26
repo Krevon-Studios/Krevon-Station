@@ -59,11 +59,15 @@ function restoreLegacyWorkAreaIfNeeded(): void {
 }
 
 function getHelperSourcePath(): string {
-  return join(__dirname, '../../src/main/vendor/AppBarHelper.source.cs')
+  return app.isPackaged
+    ? join(process.resourcesPath, 'vendor/AppBarHelper.source.cs')
+    : join(__dirname, '../../src/main/vendor/AppBarHelper.source.cs')
 }
 
 function getHelperExePath(): string {
-  return join(__dirname, '../../src/main/vendor/AppBarHelper.exe')
+  return app.isPackaged
+    ? join(process.resourcesPath, 'vendor/AppBarHelper.exe')
+    : join(__dirname, '../../src/main/vendor/AppBarHelper.exe')
 }
 
 function ensureHelperBuilt(): string {

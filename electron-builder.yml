@@ -1,0 +1,79 @@
+appId: com.krevon.station
+productName: Krevon Station
+copyright: Copyright © 2025 Krevon Station Contributors
+
+# Where electron-vite puts the compiled output
+directories:
+  output: dist
+  buildResources: build
+
+# The main entry — electron-vite builds to out/
+files:
+  - out/**/*
+  - node_modules/**/*
+  - "!node_modules/**/test*"
+  - "!node_modules/**/*.md"
+
+# Ship the Python scripts + vendor helpers alongside the app
+# They are accessed at runtime via process.resourcesPath
+extraResources:
+  - from: resources/python/audio-monitor.exe
+    to: audio-monitor.exe
+  - from: resources/python/network-monitor.exe
+    to: network-monitor.exe
+  - from: resources/python/notification-monitor.exe
+    to: notification-monitor.exe
+  - from: resources/python/wifi-scan.exe
+    to: wifi-scan.exe
+  - from: resources/python/wifi-toggle.exe
+    to: wifi-toggle.exe
+  - from: src/main/desktop-monitor.ps1
+    to: desktop-monitor.ps1
+  - from: src/main/switch-desktop.ps1
+    to: switch-desktop.ps1
+  - from: src/main/vendor/VirtualDesktopHelper.exe
+    to: vendor/VirtualDesktopHelper.exe
+  - from: src/main/vendor/VirtualDesktopHelper.LICENSE.txt
+    to: vendor/VirtualDesktopHelper.LICENSE.txt
+  - from: src/main/vendor/AppBarHelper.source.cs
+    to: vendor/AppBarHelper.source.cs
+  - from: src/main/vendor/AppBarHelper.exe
+    to: vendor/AppBarHelper.exe
+  - from: resources/logo_solid.png
+    to: logo_solid.png
+  - from: resources/logo_solid.ico
+    to: logo_solid.ico
+  - from: resources/logo_transparent.png
+    to: logo_transparent.png
+
+win:
+  target:
+    - target: nsis
+      arch: x64
+  icon: resources/logo_solid.ico
+  # Signed builds require a code-signing certificate.
+  # Unsigned builds still install correctly; Windows will show a SmartScreen
+  # warning on first run. Add your cert here when ready:
+  # certificateFile: cert.pfx
+  # certificatePassword: ${env.CERT_PASSWORD}
+
+nsis:
+  # One-click per-user install — no admin rights required
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  # Run the app immediately after install
+  runAfterFinish: true
+  # Start with Windows on install
+  createStartMenuShortcut: true
+  createDesktopShortcut: false
+  # NSIS script for startup registry key (run on login)
+  include: build/installer.nsh
+
+# Auto-update via GitHub Releases
+# Set GH_TOKEN env var (or pass --token) when publishing.
+publish:
+  provider: github
+  owner: YOUR_GITHUB_USERNAME
+  repo: Dynamic-Island
+  releaseType: release

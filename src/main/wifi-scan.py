@@ -11,10 +11,19 @@ instantly while the OS scans asynchronously in the background.
 Outputs a single JSON array to stdout then exits.
 """
 
+import sys
+import io
+
+# PyInstaller --noconsole sets sys.stdout/stderr to None even when Electron
+# pipes them. Re-attach to the raw file descriptors so print() works.
+if sys.stdout is None:
+    sys.stdout = io.TextIOWrapper(io.FileIO(1, closefd=False), encoding='utf-8', line_buffering=True)
+if sys.stderr is None:
+    sys.stderr = io.TextIOWrapper(io.FileIO(2, closefd=False), encoding='utf-8', line_buffering=True)
+
 import ctypes
 import ctypes.wintypes as wt
 import json
-import sys
 
 # ── wlanapi.dll bindings ───────────────────────────────────────────────────────
 

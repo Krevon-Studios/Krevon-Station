@@ -1,10 +1,13 @@
 import { Tray, Menu, nativeImage, app } from 'electron'
+import { join } from 'path'
+import { existsSync } from 'fs'
+import { checkForUpdatesManually } from './auto-update'
 import type { BrowserWindow } from 'electron'
 
 export function createTray(wins: BrowserWindow[]): void {
   const icon = buildTrayIcon()
   const tray = new Tray(icon)
-  tray.setToolTip('Dynamic Island')
+  tray.setToolTip('Krevon Station')
 
   const menu = Menu.buildFromTemplate([
     {
@@ -20,6 +23,11 @@ export function createTray(wins: BrowserWindow[]): void {
     },
     { type: 'separator' },
     {
+      label: 'Check for updates…',
+      click: () => checkForUpdatesManually(wins)
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => app.quit()
     }
@@ -29,6 +37,16 @@ export function createTray(wins: BrowserWindow[]): void {
 }
 
 function buildTrayIcon(): Electron.NativeImage {
+  // Prefer the real logo from resources (packaged or dev)
+  const resourcesDir = app.isPackaged
+    ? process.resourcesPath
+    : join(app.getAppPath(), 'resources')
+  const iconPath = join(resourcesDir, 'logo_transparent.png')
+  if (existsSync(iconPath)) {
+    return nativeImage.createFromPath(iconPath)
+  }
+
+  // Fallback: generated circle (used only if logo file is missing)
   const size = 16
   const buf = Buffer.alloc(size * size * 4)
   const cx = 7.5

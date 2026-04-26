@@ -1,15 +1,18 @@
 {
-  "name": "dynamic-island",
-  "version": "0.1.0",
-  "description": "Dynamic Island for Windows with Claude Code integration",
+  "name": "krevon-station",
+  "version": "1.0.3",
+  "description": "Krevon Station — macOS-style Dynamic Island overlay for Windows",
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron-vite preview"
+    "start": "electron-vite preview",
+    "dist": "electron-vite build && electron-builder",
+    "dist:dir": "electron-vite build && electron-builder --dir"
   },
   "dependencies": {
     "@coooookies/windows-smtc-monitor": "^1.0.12",
+    "electron-updater": "^6.3.9",
     "express": "^4.19.2",
     "lucide-react": "^1.8.0"
   },
@@ -22,6 +25,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.19",
     "electron": "^31.4.0",
+    "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "framer-motion": "^11.3.28",
     "postcss": "^8.4.39",

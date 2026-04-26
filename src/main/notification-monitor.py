@@ -17,19 +17,26 @@ Requirements:
               winrt-Windows.UI.Notifications winrt-Windows.UI.Notifications.Management
 """
 
+import sys
+import io
+
+# PyInstaller --noconsole sets sys.stdout/stderr to None even when Electron
+# pipes them. Re-attach to the raw file descriptors so print() works.
+if sys.stdout is None:
+    sys.stdout = io.TextIOWrapper(io.FileIO(1, closefd=False), encoding='utf-8', line_buffering=True)
+elif hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
+if sys.stderr is None:
+    sys.stderr = io.TextIOWrapper(io.FileIO(2, closefd=False), encoding='utf-8', line_buffering=True)
+elif hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
+
 import asyncio
 import ctypes
-import io
 import json
-import sys
 import threading
 import time
 import winreg
-
-# Force line-buffered (unbuffered for binary) output so every emit() reaches
-# Electron's readline pipe immediately, even when stdout is not a tty.
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', line_buffering=True)
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', line_buffering=True)
 
 # ── COM STA setup ──────────────────────────────────────────────────────────────
 # WinRT event registration requires an STA (Single-Threaded Apartment) thread.
@@ -44,14 +51,14 @@ _sta_loop: asyncio.AbstractEventLoop | None = None
 _removed_ids: set[int] = set()
 
 # ── App identity ───────────────────────────────────────────────────────────────
-APP_ID = "DynamicIsland.NotificationListener"
+APP_ID = "KrevonStation.NotificationListener"
 
 
 def register_aumid() -> None:
     key_path = rf"SOFTWARE\Classes\AppUserModelId\{APP_ID}"
     try:
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, key_path)
-        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Dynamic Island")
+        winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Krevon Station")
         winreg.SetValueEx(key, "IconUri",     0, winreg.REG_SZ, "")
         winreg.CloseKey(key)
     except Exception as e:

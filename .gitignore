@@ -4,3 +4,9 @@ dist
 .DS_Store
 *.local
 *.tsbuildinfo
+
+# PyInstaller work/cache directories (compiled .exe outputs go to resources/python/ and ARE committed)
+build/pyinstaller/
+
+# Embeddable Python interpreter archive (dev artifact, not shipped)
+resources/python.zip

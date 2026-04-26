@@ -1,133 +1,74 @@
-# Dynamic Island for Windows
+# Krevon Station
 
-A macOS-style Dynamic Island overlay for Windows, built with Electron + React. Shows real-time Claude Code activity (tool calls, session start, task completion) and Windows media controls — all in a floating pill at the top of your screen, with a full-width taskbar showing virtual desktop pagination.
+> A macOS-style Dynamic Island for Windows — floating pill at the top of your screen with live Claude Code activity, media controls, WiFi & audio management, virtual desktop switching, and Windows notifications.
 
-![idle](https://img.shields.io/badge/state-idle-555) ![tool](https://img.shields.io/badge/state-tool__active-7C6AFF) ![done](https://img.shields.io/badge/state-task__done-34D399) ![media](https://img.shields.io/badge/state-media-1DB954)
+![idle](https://img.shields.io/badge/state-idle-555)
+![tool](https://img.shields.io/badge/state-tool__active-7C6AFF)
+![done](https://img.shields.io/badge/state-task__done-34D399)
+![media](https://img.shields.io/badge/state-media-1DB954)
+![platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)
+![license](https://img.shields.io/badge/license-MIT-green)
+
+---
+
+## What is it?
+
+Krevon Station puts a smart, always-on-top pill at the top of your screen — similar to the Dynamic Island on iPhone. It stays out of your way (fully click-through) until it has something to show you, then smoothly expands with live information.
+
+It also replaces your system taskbar strip with a sleek full-width bar that shows virtual desktop dots, system tray icons, WiFi signal, and volume — all reactive to your system in real time.
 
 ---
 
 ## Features
 
-- **Claude Code integration** — live tool call display, session start notification, task completion with cost/turns/duration
-- **Live Clock & Media Visualizer** — idle state shows live date/time; actively playing media displays a dynamic visualizer and track info on the closed pill
-- **Windows media controls** — play/pause, skip forward/back, directly from the pill
-- **Multi-source support** — cycle between Spotify, Chrome, Edge, etc. with per-session control and interactive pagination dots
-- **Windows accent color theming** — all UI accents (pill indicators, drawer toggles, sliders, WiFi/audio active states) automatically match the Windows accent color set in Settings → Personalization → Colors; updates live without restart
-- **Interactive Control Drawer** — click the system tray icons to open a sleek, Framer Motion-animated control panel featuring a live WiFi network scanner and a real-time per-app audio mixer; click the avatar to jump directly to Windows Settings → Accounts
-- **Windows Notification Panel** — live Windows toast notifications appear in a scrollable panel below the drawer whenever it is open; cards show app icon, name, title, body, and arrival time; dismiss individually or clear all; clicking a card launches the source app; custom thin scrollbar with an animated scroll-indicator arrow; silky spring animation matching the drawer
-- **Virtual desktop pagination** — full-width taskbar shows live desktop count and active index; click dots to jump desktops directly through a native helper, with hotkey fallback
-- **Live system tray icons** — WiFi (4 signal levels), no-network, no-internet badges, audio (4 volume levels + mute), VPN key indicator — all highly optimized using hybrid event-listeners and polling
-- **Click-through** — mouse passes through the pill when not hovering; interactive on hover
-- **Dynamic resize** — pill expands/contracts smoothly per state
-- **Always on top** — hides behind fullscreen apps automatically
-- **System tray** — show/hide/quit from tray icon
+### Claude Code Integration
+- Shows which tool Claude is currently running (Reading file, Writing file, Running command, etc.)
+- Displays session start notifications
+- Task completion summary with total cost, turn count, and duration
+
+### Media Controls
+- Play/pause, skip forward, skip back directly from the pill
+- Supports Spotify, Chrome, Edge, Firefox, VLC, and more
+- Multiple sources active at once? Cycle between them with pagination dots
+- Album art, track name, and artist shown on hover
+
+### Live System Info
+- **WiFi** — signal strength (4 levels), SSID, no-network and no-internet badges
+- **Audio** — master volume level and mute state, with a 4-level icon
+- **VPN** — key icon appears automatically when a VPN adapter is detected
+- **Windows accent color** — all UI accents follow your color set in Settings → Personalization → Colors, live without restart
+
+### Control Drawer
+Click any system tray icon to open an animated panel with:
+- Live WiFi network scanner — scan, see signal strength, connect
+- Real-time per-app audio mixer — adjust volume per application, switch output devices
+
+### Windows Notifications
+- Live toast notifications appear in a scrollable panel below the drawer
+- App icon, name, title, body, and arrival time
+- Dismiss individually, clear all, or click to launch the source app
+
+### Virtual Desktop Pagination
+- Full-width taskbar shows your desktop count and active index as dots
+- Click a dot to jump directly to that desktop (no stepping through intermediate ones on supported builds)
+- Falls back to Win+Ctrl+Arrow on unsupported systems
 
 ---
 
-## Stack
+## Installation
 
-| Layer | Tech |
-|---|---|
-| App shell | Electron 31 |
-| Build | electron-vite + Vite 5 |
-| UI | React 18 + Tailwind CSS + Framer Motion |
-| Icons | Lucide React |
-| Package manager | Bun |
-| Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
-| Hook server | Express on `127.0.0.1:7823` |
-| System stats | Python 3 + `pycaw` + `psutil` + `wlanapi.dll` (hybrid event-driven architecture) |
-| Notifications | Python 3 + Windows Runtime (`winrt` — `UserNotificationListener`) — real-time WinRT events with 2 s poll fallback |
+1. Go to the [**Releases**](../../releases) page
+2. Download `Krevon Station Setup x.x.x.exe`
+3. Run the installer — no admin rights required
+4. Krevon Station starts immediately and runs in the background on every login
+
+> **SmartScreen warning:** Because the app is unsigned, Windows may show "Windows protected your PC" on first run. Click **More info → Run anyway**.
 
 ---
 
-## States
+## Claude Code Setup
 
-| Mode | Trigger | Size (Closed → Hovered) |
-|---|---|---|
-| `idle` | Default / no activity (shows live clock) | 210×32 → 320×72 |
-| `session_start` | Claude Code session begins | 210×32 → 320×80 |
-| `tool_active` | Claude Code tool call | 210×32 → 340×80 |
-| `task_done` | Claude Code task completes | 210×32 → 360×80 |
-| `media` | SMTC media session active | 240×32 → 420×110 |
-
-Claude Code states always override media state. When Claude finishes, media resumes if something is playing.
-
----
-
-## Project Structure
-
-```
-src/
-├── main/
-│   ├── index.ts              # App entry, IPC handlers
-│   ├── window.ts             # BrowserWindow config (full-width, transparent, always-on-top)
-│   ├── hook-server.ts        # Express server — receives Claude Code hooks
-│   ├── media-watcher.ts      # Worker manager + PowerShell media control
-│   ├── media-worker.ts       # Worker thread — SMTC session monitoring
-│   ├── desktop-watcher.ts    # Virtual desktop state — registry monitor + switch IPC
-│   ├── desktop-monitor.ps1   # PowerShell — blocks on RegNotifyChangeKeyValue, streams changes
-│   ├── switch-desktop.ps1    # PowerShell — persistent stdin loop, calls native helper, falls back to hotkeys
-│   ├── system-stats.ts       # Spawns Python monitors, broadcasts system-stats IPC
-│   ├── audio-monitor.py      # Python — IAudioEndpointVolumeCallback COM callback (zero polling)
-│   ├── network-monitor.py    # Python — Hybrid: NotifyAddrChange + polling for signal strength
-│   ├── notification-monitor.py # Python — Windows Runtime toast notification watcher (WNF/SQLite)
-│   ├── wifi-scan.py          # Python — Native wlanapi.dll async network scanner
-│   ├── wifi-toggle.py        # Python — Native wlanapi.dll radio toggle (no admin required)
-│   ├── vendor/
-│   │   ├── VirtualDesktopHelper.exe
-│   │   ├── VirtualDesktopHelper.source.cs
-│   │   └── VirtualDesktopHelper.LICENSE.txt
-│   └── tray.ts               # System tray menu
-├── preload/
-│   └── index.ts              # Context-isolated window.island IPC bridge
-└── renderer/src/
-    ├── types.ts              # IslandState, MediaSessionData
-    ├── env.d.ts              # window.island API types (incl. SystemStats)
-    ├── components/
-    │   ├── Island.tsx        # All state UIs + media controls
-    │   ├── Taskbar.tsx       # Full-width top bar — desktop dots + live system icons
-    │   ├── Drawer.tsx        # Framer Motion animated WiFi & Audio control panel
-    │   └── NotificationCards.tsx  # Live Windows notification panel with scroll & dismiss
-    └── store/
-        └── useIslandStore.ts # State machine + window resize logic
-```
-
----
-
-## Setup
-
-### Prerequisites
-
-- Windows 10/11
-- [Bun](https://bun.sh) — `winget install Oven-sh.Bun`
-- [Node.js](https://nodejs.org) 18+ (for Electron toolchain)
-- [Python 3](https://python.org) 3.8+ with `pip` — required for system tray icon monitoring
-
-  ```bash
-  pip install pycaw psutil
-  ```
-
-### Install & Run
-
-```bash
-git clone https://github.com/yourusername/dynamic-island
-cd dynamic-island
-bun install
-bun run dev
-```
-
-### Build
-
-```bash
-bun run build
-bun run start   # preview production build
-```
-
----
-
-## Claude Code Hooks
-
-Add to `C:\Users\<you>\.claude\settings.json`:
+Add these hooks to `C:\Users\<you>\.claude\settings.json` so the pill reacts to your Claude Code sessions:
 
 ```json
 {
@@ -154,297 +95,64 @@ Add to `C:\Users\<you>\.claude\settings.json`:
 }
 ```
 
-> **Note:** Use `curl.exe` not `curl` — PowerShell aliases `curl` to `Invoke-WebRequest` which has different syntax.
+> Use `curl.exe` not `curl` — PowerShell aliases `curl` to `Invoke-WebRequest`.
 
-Start the Dynamic Island app **before** starting a Claude Code session. The hook server listens on `http://127.0.0.1:7823`.
-
----
-
-## How It Works
-
-### Claude Code Flow
-
-```
-Claude Code                Hook Server            Renderer
-    │                          │                      │
-    ├─ SessionStart ──curl.exe─▶ POST /session         │
-    │                          ├── island:session-start▶ pill expands
-    │                          │                      │
-    ├─ PreToolUse ───curl.exe─▶ POST /tool             │
-    │                          ├── island:tool-active ▶ shows tool name
-    │                          │                      │
-    └─ Stop ─────────curl.exe─▶ POST /done             │
-                               └── island:task-done  ▶ shows cost + turns
-```
-
-### Media Control Flow
-
-```
-User clicks button in pill
-    │
-    ▼
-window.island.controlMedia(action, sourceAppId)
-    │
-    ▼ IPC: control-media
-Main process
-    │
-    ▼
-PowerShell script (di-control.ps1 in %TEMP%)
-    │
-    ├─ 1. WinRT TryTogglePlayPauseAsync() on specific SMTC session
-    │      → works for UWP apps (Spotify, etc.)
-    │      → polls IAsyncInfo.Status until complete
-    │
-    └─ 2. PostMessage(WM_APPCOMMAND) to app window
-           → fallback for Win32 apps (Chrome, Edge, Firefox)
-```
-
-### Media Monitoring
-
-Worker thread runs `@coooookies/windows-smtc-monitor` (NAPI native addon, ABI-stable). Fires events on any SMTC change → sends full sessions array to main → forwards to renderer via `island:media` IPC. Starts 1.5s after app ready to avoid blocking main thread startup.
-
-**Multi-Source Tracking:** When multiple media sources are active (e.g. Spotify and Chrome), users can cycle through them using interactive pagination dots in the pill. The app tracks the active session by its `sourceAppId` rather than index, preventing UI jumps when Windows dynamically re-orders the underlying session array based on recent playback. Auto-switching prioritizes actively playing sources automatically unless the user manually overrides it.
-
-### Notification System
-
-```
-notification-monitor.py (persistent Python process — STA thread, COM apartment)
-    │
-    ├─ UserNotificationListener.request_access_async()  [WinRT]
-    │      → requires Settings > Privacy > Notifications access
-    │
-    ├─ Initial snapshot: get_notifications_async(TOAST)
-    │      → emits {type:"added", id, appId, appName, title, body, arrivalTime}
-    │
-    ├─ add_notification_changed() event subscription  [best-effort]
-    │      → on change: re-runs snapshot, emits added/removed diffs
-    │      → falls back to 2 s poll if event registration fails
-    │
-    ├─ stdin: {"cmd": "remove", "ids": [<int>, ...]}
-    │      → asyncio.run_coroutine_threadsafe → STA loop
-    │      → remove_notification(id) per ID
-    │      → immediately emits {type:"removed", id} — no waiting for event/poll
-    │      → _removed_ids set prevents duplicate removed events from next snapshot
-    │
-    └─ stdout JSON lines → createInterface readline → sendToNotifWin()
-                    │
-                    ▼ IPC: island:notifications
-              NotificationCards.tsx (notifWin renderer)
-                    │
-                    ├─ Adds cards to scrollable panel below drawer
-                    ├─ Dismiss (X button) → dismissNotifications([id]) → Python stdin
-                    ├─ Clear All → dismissNotifications(allIds) → Python stdin
-                    └─ Click card → systemAction('launch:<appId>') + dismiss
-```
-
-The notification window is a full-height transparent overlay co-located with the drawer window. It is **never resized or repositioned during animations** — Framer Motion animates the panel entirely inside the fixed transparent Electron window. The panel's CSS `top` offset is updated via `drawer:height` IPC whenever the drawer card height changes, keeping it flush below the drawer card with no Electron window movement.
-
-### Virtual Desktop Pagination
-
-```
-App start
-    │
-    ├─ readInitialState() ── reg query ──▶ parse VirtualDesktopIDs + CurrentVirtualDesktop
-    │                                      (synchronous, before renderer loads)
-    │
-    ├─ desktop-monitor.ps1 ── RegNotifyChangeKeyValue ──▶ blocks until registry changes
-    │      (persistent)            │
-    │                              └─ stdout line "idsHex|currentHex" ──▶ island:virtual-desktops
-    │
-    └─ switch-desktop.ps1 ── stdin loop ──▶ reads "targetIndex|fromIndex"
-           (persistent)            │
-                                   ├─ VirtualDesktopHelper.exe /Animation:Off /Switch:<n>
-                                   └─ fallback: keybd_event(Win+Ctrl+Arrow × N steps)
-
-Renderer mounts
-    │
-    ├─ invoke('get-virtual-desktops') ──▶ returns current count + activeIndex immediately
-    └─ on('island:virtual-desktops')  ──▶ listens for subsequent changes
-```
-
-Switching sends an optimistic IPC push to the renderer immediately for instant visual feedback, then the registry monitor confirms the actual desktop change.
-
-### App Bar Registration
-
-```
-App start
-    │
-    ├─ AppBarHelper.exe (compiled on first run from AppBarHelper.source.cs)
-    │      │
-    │      ├─ SetProcessDpiAwarenessContext(PerMonitorV2)
-    │      │      → all coordinates are in physical pixels
-    │      │
-    │      ├─ GetDpiForMonitor(primary) → convert 32 DIP height to physical px
-    │      │      e.g. 32 DIP × 1.25 = 40 physical px at 125% scaling
-    │      │
-    │      └─ SHAppBarMessage(ABM_SETPOS, edge=top, height=40px)
-    │             → shell reserves 40 physical px; apps/maximised windows
-    │               cannot occupy that strip
-    │
-    ├─ helper stdout "left|top|right|bottom" (physical px)
-    │      → appbar.ts divides by scaleFactor → DIPs for Electron setBounds
-    │      → taskbarWin.setBounds(rect)
-    │
-    └─ pinIslandToTop() called after every rect update
-           → islandWin.setBounds({y: 0})  (snaps inside the reserved zone)
-           → if Windows overrides the position during work-area settling,
-             retries up to 5× at 50 ms intervals until it sticks
-```
+Start Krevon Station **before** opening a Claude Code session. The hook server listens on `http://127.0.0.1:7823`.
 
 ---
 
-## IPC Channels
+## Notification Access
 
-| Channel | Direction | Payload |
-|---|---|---|
-| `island:session-start` | Main → Renderer | `{ session_id }` |
-| `island:tool-active` | Main → Renderer | `{ tool_name }` |
-| `island:task-done` | Main → Renderer | `{ total_cost_usd, num_turns, duration_ms }` |
-| `island:media` | Main → Renderer | `{ sessions: MediaSessionData[] }` |
-| `island:hover` | Main → Renderer | `boolean` |
-| `island:virtual-desktops` | Main → Renderer | `{ count: number, activeIndex: number }` |
-| `island:notifications` | Main → notifWin | `{ type, id, appId, appName, title, body, arrivalTime }` |
-| `system-stats` | Main → Renderer | `{ network: NetworkState, audio: AudioState }` |
-| `accent-color` | Main → All windows | `{ r, g, b }` |
-| `drawer:show` | Main → drawerWin + notifWin | `type: string` |
-| `drawer:force-close` | Main → drawerWin + notifWin | — |
-| `drawer:height` | Main → notifWin | `h: number` — current drawer card height for CSS panel positioning |
-| `drawer:resize` | notifWin → Main | `h: number` — sets drawer window height to match animated card |
-| `get-virtual-desktops` | Renderer → Main (invoke) | — returns `{ count, activeIndex }` |
-| `get-system-stats` | Renderer → Main (invoke) | — returns current `SystemStats` snapshot |
-| `scan-wifi-networks` | Renderer → Main (invoke) | — returns `WifiNetwork[]` |
-| `get-wifi-state` | Renderer → Main (invoke) | — returns `{ enabled: boolean }` |
-| `set-wifi-enabled` | Renderer → Main (invoke) | `enable: boolean` |
-| `connect-wifi` | Renderer → Main (invoke) | `ssid: string` |
-| `get-notif-icon` | notifWin → Main (invoke) | `appId: string` — returns base64 PNG or null |
-| `dismiss-notifications` | notifWin → Main (invoke) | `ids: number[]` — removes specific WinRT notifications via Python stdin |
-| `set-session-volume` | Renderer → Main | `(pid, volume, muted)` |
-| `set-audio-device` | Renderer → Main | `deviceId: string` |
-| `switch-virtual-desktop` | Renderer → Main | `targetIndex: number` |
-| `control-media` | Renderer → Main | `(action, sourceAppId)` |
-| `set-hit-box` | Renderer → Main | `(w, h)` |
-| `get-user-info` | Renderer → Main (invoke) | — returns `{ avatar: string\|null, name: string }` |
-| `system-action` | Renderer → Main (invoke) | `action: 'lock'\|'sleep'\|'restart'\|'shutdown'\|'screenshot'\|'settings'\|'profile'\|'launch:<appId>'` |
+For the notification panel to work, grant access once:
+
+**Settings → Privacy & security → Notifications → Allow apps to access your notifications → On**
 
 ---
 
-## Media Source Support
+## Auto-Update
 
-Recognized apps (from SMTC `SourceAppUserModelId`):
-
-| App | AUMID pattern |
-|---|---|
-| Spotify | `SpotifyAB.SpotifyMusic_...!Spotify` |
-| Chrome | `Chrome` |
-| Firefox | `Firefox` |
-| Edge | `msedge` / `Microsoft.Edge` |
-| Opera | `opera` |
-| Brave | `brave` |
-| VLC | `vlc` |
-| Amazon Music | `amazon` |
-| YT Music | `youtubemusic` |
-| TIDAL | `tidal` |
-| foobar2000 | `foobar2000` |
-| WhatsApp | `whatsapp` |
-
-Unknown apps fall back to the last segment of the AUMID.
-
----
-
-## Tool Label Mapping
-
-| Tool name (contains) | Display label |
-|---|---|
-| `read` | Reading file |
-| `write` | Writing file |
-| `edit` | Editing file |
-| `bash` | Running command |
-| `glob` | Searching files |
-| `grep` | Searching code |
-| `web_search` | Searching web |
-| `web_fetch` | Fetching URL |
-| `todo` | Updating tasks |
-| `agent` | Spawning agent |
-
-Unknown tools are title-cased from their snake_case name.
-
----
-
-## Window Behavior
-
-- **Transparent** — `transparent: true`, `backgroundColor: '#00000000'`, no frame
-- **Full-width** — window spans the full primary display width to accommodate the taskbar
-- **Taskbar** — 32px black bar at top with virtual desktop pagination dots (left) and system tray icons (right); casts a full-width shadow beneath it
-- **Island shadow** — pill has no shadow when closed (merges visually with taskbar); shadow fades in via Framer Motion when pill expands below the 32px taskbar zone, preventing overlap
-- **Dynamic Hit Box** — renderer sends true intended dimensions (`set-hit-box`) to main process. Main polls `screen.getCursorScreenPoint()` at 16ms against this hit box. Taskbar area always interactive regardless of island state.
-- **Position** — flush with top-left of primary display (`x: 0, y: 0`)
-- **Pill shape** — top corners flush (`0px`), bottom corners rounded (`14px` idle, `22px` expanded)
-- **Always on top** — `setAlwaysOnTop(true, 'pop-up-menu')` hides behind fullscreen apps
-- **Non-focusable** — `focusable: false`; keyboard focus never stolen
-- **Click-through** — `setIgnoreMouseEvents(true, { forward: true })` by default; disabled over island hover zone and taskbar
-- **Session Restore** — DWM drops hit-test caching for transparent, non-focusable windows after sleep, lock screens, or exiting exclusive fullscreen apps. The app forces DWM to rebuild the interactive region using a lazy, hover-triggered 1px bounds resize.
-- **Registered App Bar** — the taskbar window is registered with the Windows shell via `SHAppBarMessage` so the OS reserves the top 32px and all apps/maximised windows respect it as unusable space; the bar survives display-metrics changes
-- **Notification overlay** — a separate full-height transparent `notifWin` sits co-located with the drawer window (same x/y anchor). To bypass Windows DWM bugs that break the hit-test cache for hidden transparent windows, it is permanently visible but completely click-through by default. It restricts its interactive area dynamically from `notifPanelTop` downwards (computed synchronously in the main process during drawer resizes). Framer Motion handles all animation inside this fixed overlay, with CSS `top` offset updated via IPC to track the drawer card's current height.
+Krevon Station checks for updates silently in the background on every launch. When a new version is ready, you'll get a prompt to restart. You can also trigger a manual check from the system tray icon → **Check for updates…**
 
 ---
 
 ## Troubleshooting
 
 **Pill not appearing**
-- Check `bun run dev` output for errors
-- Ensure no other instance is running (single-instance lock)
+- Make sure no other instance is already running (check system tray)
+- Run from the Start Menu shortcut, not the installer
 
 **Claude hooks not firing**
-- Verify `curl.exe` (not `curl`) in settings.json
-- App must be running before Claude Code session starts
-- Test: `curl.exe -X POST http://127.0.0.1:7823/session -H "Content-Type: application/json" -d "{}"`
+- Confirm `curl.exe` (not `curl`) in `settings.json`
+- Krevon Station must be running before you start Claude Code
+- Quick test: `curl.exe -X POST http://127.0.0.1:7823/session -H "Content-Type: application/json" -d "{}"`
 
 **Media not showing**
-- Requires Windows 10 1809+ for SMTC API
-- Check console for `[media-watcher] ready` log
-- Play something in Spotify or a browser — appears within 1.5s of app start
+- Requires Windows 10 1809 or later
+- Play something in Spotify or a browser — it appears within ~1.5 seconds
 
-**Media controls wrong session**
-- WinRT control targets session by `SourceAppUserModelId`; select correct source using the pagination dots in the pill
-- Controls take ~300–800ms (PowerShell startup + WinRT init)
-
-**Virtual desktop pagination not updating**
-- Requires PowerShell execution policy to allow unsigned scripts (`-ExecutionPolicy Bypass` is passed automatically)
-- The switcher now attempts a maintained native helper first for instant non-sequential moves
-- If the helper cannot access the virtual desktop API on a given machine, the app falls back to `Win+Ctrl+Arrow`, which still animates through intermediate desktops
-
-**WiFi/audio icons not appearing or stuck**
-- Ensure Python 3 is installed and on PATH: `python --version` or `py --version`
-- Ensure `pycaw` and `psutil` are installed: `pip install pycaw psutil`
-- Check the Electron console for `[audio:err]` or `[network:err]` lines
+**WiFi/audio not showing**
+- These features are self-contained — no Python install required on your machine
+- If icons are stuck, check the system tray → right-click → Quit, then relaunch
 
 **Notifications not appearing**
-- Ensure Python 3 is on PATH — the notification monitor is a persistent Python process
-- Open the drawer (click any system tray icon) — the notification panel only appears while the drawer is open
-- Notifications require at least one active Windows toast to display; check Action Center to confirm there are unread notifications
-- Check the Electron console for `[notif:err]` lines
+- Open the drawer first (click a system tray icon) — the notification panel only shows while the drawer is open
+- Check that notification access is granted (see above)
+- Confirm there are unread notifications in Action Center
 
-**VPN key icon not showing**
-- The VPN icon appears when any active network adapter name contains a known VPN keyword (TAP, TUN, WireGuard, NordVPN, ExpressVPN, ProtonVPN, Mullvad, OpenVPN, Cisco AnyConnect, GlobalProtect, etc.)
-- If your VPN client uses an unlisted adapter name, open `src/main/network-monitor.py` and add the keyword to `_VPN_KEYWORDS`
+**Virtual desktop dots not switching**
+- Direct switching targets Windows 11 24H2 — on other builds it falls back to Win+Ctrl+Arrow (works everywhere, just animates through intermediate desktops)
 
-## Virtual Desktop Compatibility
+---
 
-Direct desktop switching is implemented through a bundled native helper that targets the newer Windows virtual desktop API shape used by many Windows 11 24H2 builds. This gives the app true non-sequential jumps such as desktop 1 → desktop 3 without visibly stepping through desktop 2.
+## Supported Media Apps
 
-Windows does not provide a stable public API for switching the current virtual desktop directly, so this feature depends on undocumented system interfaces that can change between Windows releases and cumulative updates. Because of that, compatibility is best-effort rather than guaranteed across every machine.
+Spotify, Chrome, Edge, Firefox, Opera, Brave, VLC, Amazon Music, YouTube Music, TIDAL, foobar2000, WhatsApp — and any other app that registers with the Windows SMTC API.
 
-What to expect:
+---
 
-- On compatible systems, clicking a pagination dot jumps directly to the selected desktop.
-- On unsupported or mismatched systems, the app falls back to standard `Win+Ctrl+Arrow` switching.
-- The fallback keeps desktop switching functional, but Windows will animate through intermediate desktops.
+## Contributing
 
-For open source contributors and users, the safest expectation is:
-
-- Direct switching is supported on many Windows 11 24H2 systems.
-- Other Windows versions or builds may still work, but should be treated as unverified unless tested.
-- The project is designed to degrade gracefully instead of breaking when the native helper is unavailable.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for project structure, dev setup, build pipeline, IPC channel reference, and architecture notes.
 
 ---
 

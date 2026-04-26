@@ -17,11 +17,20 @@ stdin commands (JSON lines):
   {"session": {"pid": N, "muted": true}}   → set app mute
   {"set_device": "<endpoint-id>"}          → set default render device
 """
+import sys
+import io
+
+# PyInstaller --noconsole sets sys.stdout/stderr to None even when Electron
+# pipes them. Re-attach to the raw file descriptors so print() works.
+if sys.stdout is None:
+    sys.stdout = io.TextIOWrapper(io.FileIO(1, closefd=False), encoding='utf-8', line_buffering=True)
+if sys.stderr is None:
+    sys.stderr = io.TextIOWrapper(io.FileIO(2, closefd=False), encoding='utf-8', line_buffering=True)
+
 import json
 import ctypes
 import ctypes.wintypes as wt
 import threading
-import sys
 import comtypes
 import comtypes.client
 from comtypes import COMObject, CLSCTX_ALL, GUID, HRESULT, IUnknown

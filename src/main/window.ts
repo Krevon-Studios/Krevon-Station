@@ -1,5 +1,6 @@
-import { BrowserWindow, screen, nativeImage } from 'electron'
+import { BrowserWindow, screen, nativeImage, app } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 
 export const TASKBAR_H = 32
 export const DRAWER_W  = 260
@@ -165,6 +166,16 @@ export function createNotificationWindow(): BrowserWindow {
 }
 
 function buildIcon(): Electron.NativeImage {
+  // Prefer the real logo bundled in resources
+  const resourcesDir = app.isPackaged
+    ? process.resourcesPath
+    : join(app.getAppPath(), 'resources')
+  const iconPath = join(resourcesDir, 'logo_solid.png')
+  if (existsSync(iconPath)) {
+    return nativeImage.createFromPath(iconPath)
+  }
+
+  // Fallback: generated circle (used only if logo file is missing)
   const size = 16
   const buf = Buffer.alloc(size * size * 4)
   for (let y = 0; y < size; y++) {

@@ -5,6 +5,16 @@ Uses NotifyAddrChange() on a background thread for instant disconnect
 detection, combined with a 3-second polling loop to smoothly track
 signal strength changes over time.
 """
+import sys
+import io
+
+# PyInstaller --noconsole sets sys.stdout/stderr to None even when Electron
+# pipes them. Re-attach to the raw file descriptors so print() works.
+if sys.stdout is None:
+    sys.stdout = io.TextIOWrapper(io.FileIO(1, closefd=False), encoding='utf-8', line_buffering=True)
+if sys.stderr is None:
+    sys.stderr = io.TextIOWrapper(io.FileIO(2, closefd=False), encoding='utf-8', line_buffering=True)
+
 import json
 import ctypes
 import ctypes.wintypes as wt
