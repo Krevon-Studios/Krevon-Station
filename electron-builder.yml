@@ -74,6 +74,6 @@ nsis:
 # Set GH_TOKEN env var (or pass --token) when publishing.
 publish:
   provider: github
-  owner: YOUR_GITHUB_USERNAME
-  repo: Dynamic-Island
+  owner: Krevon-Studios
+  repo: Krevon-Station
   releaseType: release
