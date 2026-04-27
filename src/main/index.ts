@@ -13,6 +13,20 @@ import { createInterface } from 'readline'
 
 app.setName('Krevon Station')
 
+if (app.isPackaged) {
+  app.setLoginItemSettings({ openAtLogin: true, name: 'KrevonStation' })
+  // Remove the StartupApproved disabled flag — Electron's setLoginItemSettings only
+  // writes the Run key, not StartupApproved. If Windows previously marked us disabled
+  // (value 03...) the Run entry is silently ignored. Deleting the value resets to enabled.
+  const { execSync } = require('child_process')
+  try {
+    execSync(
+      'reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run" /v "KrevonStation" /f',
+      { windowsHide: true, stdio: 'ignore' }
+    )
+  } catch { /* key didn't exist — fine */ }
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
   process.exit(0)
