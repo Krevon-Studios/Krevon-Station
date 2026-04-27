@@ -1,6 +1,6 @@
 {
   "name": "krevon-station",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Krevon Station — macOS-style Dynamic Island overlay for Windows",
   "author": {
     "name": "Krevon Studios",
@@ -12,7 +12,9 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "dist": "electron-vite build && electron-builder",
-    "dist:dir": "electron-vite build && electron-builder --dir"
+    "dist:dir": "electron-vite build && electron-builder --dir",
+    "publish": "electron-vite build && electron-builder --publish always",
+    "compile-py": "powershell -ExecutionPolicy Bypass -File scripts/compile-python.ps1"
   },
   "dependencies": {
     "@coooookies/windows-smtc-monitor": "^1.0.12",
