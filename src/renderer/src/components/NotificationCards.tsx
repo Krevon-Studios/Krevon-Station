@@ -242,9 +242,10 @@ export function NotificationCards() {
 
   // ── Drawer open/close — controls panel visibility ─────────────────────────
   useEffect(() => {
-    const unsubShow = window.island.onDrawerShow(() => setVisible(true))
-    const unsubClose = window.island.onDrawerForceClose(() => setVisible(false))
-    return () => { unsubShow(); unsubClose() }
+    const unsubShow        = window.island.onDrawerShow(() => setVisible(true))
+    const unsubForceClose  = window.island.onDrawerForceClose(() => setVisible(false))
+    const unsubClosed      = window.island.onDrawerClosed(() => setVisible(false))
+    return () => { unsubShow(); unsubForceClose(); unsubClosed() }
   }, [])
 
   // ── Drawer height updates — positions panel immediately below card via CSS ─

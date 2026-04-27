@@ -40,18 +40,22 @@ app.whenReady().then(() => {
     (isFullscreen) => {
       if (taskbarWin.isDestroyed() || islandWin.isDestroyed()) return
       if (isFullscreen) {
+        isFullscreenActive = true
         taskbarWin.setOpacity(0); taskbarWin.setIgnoreMouseEvents(true, { forward: true })
         islandWin.setOpacity(0); islandWin.setIgnoreMouseEvents(true, { forward: true })
         if (!drawerWin.isDestroyed() && drawerOpen) {
           drawerOpen = false
           drawerWin.setIgnoreMouseEvents(true, { forward: true })
           drawerWin.webContents.send('drawer:force-close')
+          if (!notifWin.isDestroyed()) notifWin.webContents.send('drawer:force-close')
         }
         if (!notifWin.isDestroyed()) notifWin.hide()
       } else {
+        isFullscreenActive = false
         taskbarWin.setOpacity(1); islandWin.setOpacity(1)
         islandWin.setAlwaysOnTop(true, 'pop-up-menu')
         interactActive = -1 as any; hoverActive = -1 as any; taskbarInteractActive = -1 as any
+        if (!notifWin.isDestroyed()) notifWin.show()
         reassertWindows('fullscreen-exit')
       }
     }
@@ -201,9 +205,10 @@ app.whenReady().then(() => {
     drawerWin.focus()
     if (!notifWin.isDestroyed()) {
       syncNotifPosition()
-      const dh = drawerWin.getBounds().height
-      // The interactive zone starts at panelTop (drawer height + 6px gap).
-      // Computed here from the known drawer bounds — no renderer round-trip needed.
+      if (!notifWin.isVisible()) notifWin.show()
+      // Use last known content height (updated by drawer:resize). Falls back to
+      // 60px on first ever open before any resize event — corrects within one frame.
+      const dh = lastDrawerContentHeight
       notifPanelTop = dh + 6
       notifWin.webContents.send('drawer:show', type)
       notifWin.webContents.send('drawer:height', dh)
@@ -232,6 +237,7 @@ app.whenReady().then(() => {
     if (!drawerWin.isDestroyed()) drawerWin.hide()
     if (!notifWin.isDestroyed()) {
       notifWin.setIgnoreMouseEvents(true, { forward: true })
+      notifWin.webContents.send('drawer:closed')
     }
   })
 
@@ -241,6 +247,7 @@ app.whenReady().then(() => {
     if (drawerWin.isDestroyed()) return
     const { bounds } = screen.getPrimaryDisplay()
     const clamped = Math.max(Math.ceil(h), 60)
+    lastDrawerContentHeight = clamped
     drawerWin.setBounds({
       x: bounds.x + bounds.width - 340,
       y: bounds.y + TASKBAR_H,
@@ -515,7 +522,7 @@ app.whenReady().then(() => {
       case 'sleep': exec('rundll32.exe powrprof.dll,SetSuspendState 0,1,0', { windowsHide: true }); break
       case 'restart': exec('shutdown /r /t 0', { windowsHide: true }); break
       case 'shutdown': exec('shutdown /s /t 0', { windowsHide: true }); break
-      case 'screenshot': exec('explorer.exe ms-screenclip:', { windowsHide: true }); break
+      case 'screenshot': lastScreenshotAt = Date.now(); exec('explorer.exe ms-screenclip:', { windowsHide: true }); break
       case 'settings': exec('explorer.exe ms-settings:', { windowsHide: true }); break
       case 'profile': exec('explorer.exe ms-settings:yourinfo', { windowsHide: true }); break
       default:
@@ -538,6 +545,9 @@ app.whenReady().then(() => {
   // Pixel offset from notifWin top to where the interactive zone starts (drawer height + 6px gap).
   // Set by drawer:open/drawer:resize. 0 = notifWin is hidden/inactive.
   let notifPanelTop = 0
+  let lastDrawerContentHeight = 60
+  let lastScreenshotAt = 0
+  let isFullscreenActive = false
 
   ipcMain.on('set-hit-box', (_e, w: number, h: number) => { hitBox = { w, h } })
 
@@ -594,6 +604,23 @@ app.whenReady().then(() => {
       notifWin.setIgnoreMouseEvents(!overNotif, { forward: true })
     }
   }, 16)
+
+  // Z-order watchdog: periodically reassert HWND_TOPMOST so other always-on-top
+  // apps can't permanently bury the taskbar or island. Skip during fullscreen
+  // (intentionally hidden) and for 10s after a screenshot (Snipping Tool overlay
+  // must stay above us while the user annotates).
+  setInterval(() => {
+    if (isFullscreenActive) return
+    if (Date.now() - lastScreenshotAt < 10_000) return
+    if (!taskbarWin.isDestroyed()) {
+      taskbarWin.setAlwaysOnTop(true, 'pop-up-menu')
+      taskbarWin.moveTop()
+    }
+    if (!islandWin.isDestroyed()) {
+      islandWin.setAlwaysOnTop(true, 'pop-up-menu')
+      islandWin.moveTop()
+    }
+  }, 4_000)
 
   // After Windows lock/unlock/fullscreen, DWM caches hit-test bounds for transparent
   // windows. We flag them here, and the poll loop will apply the 1px resize trick

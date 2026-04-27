@@ -731,7 +731,24 @@ export function Drawer() {
       setMuted(s.audio.muted)
     })
 
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDrawer() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // requestCloseDrawer → main sends force-close to BOTH drawerWin and
+        // notifWin at the same time, so both animate out simultaneously.
+        // Direct closeDrawer() only closes the drawer locally and notifies
+        // notifWin 210 ms later via drawer:closed — causes visible lag.
+        window.island.requestCloseDrawer()
+        return
+      }
+      if (e.key === 'PrintScreen') {
+        // Close drawer+notifWin first so drawerWin loses focus before Snipping
+        // Tool launches. If we kept the drawer open, drawerWin.blur fires when
+        // Snipping Tool steals focus → force-close races with the notification
+        // arrival and permanently hides the panel.
+        window.island.requestCloseDrawer()
+        setTimeout(() => window.island.systemAction('screenshot').catch(() => {}), 250)
+      }
+    }
     document.addEventListener('keydown', onKey)
 
     return () => {
