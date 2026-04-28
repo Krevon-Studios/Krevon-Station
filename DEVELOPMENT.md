@@ -182,6 +182,10 @@ Open `scripts/compile-python.ps1` and add an entry to `$scriptConfig`:
 
 ### Step 3 — Add to electron-builder extraResources
 
+> ⚠️ **CRITICAL — do not skip this step.**
+>
+> If you omit it, the exe is compiled, committed, and present in `resources/python/`, but **electron-builder never copies it into the installer**. In a packaged build `process.resourcesPath/your-helper.exe` does not exist, every IPC call silently fails, and the feature is completely broken for end users. This is not caught by `bun run dev` (dev mode runs raw `.py` directly) or by `bun run build` alone — it only surfaces after `bun run dist` and installing the resulting `.exe`. This exact mistake broke all Bluetooth functionality in the v1.0.8 release.
+
 Open `electron-builder.yml` and add two lines under `extraResources`:
 
 ```yaml
@@ -229,12 +233,18 @@ Or for one-shot scripts (like `wifi-scan`) spawn directly with `spawn()` and rea
 # Compile the new exe
 powershell -ExecutionPolicy Bypass -File scripts\compile-python.ps1
 
+# Verify electron-builder.yml has the entry BEFORE committing
+Select-String -Path electron-builder.yml -Pattern "your-helper.exe"
+# ↑ Must print at least one match. If it prints nothing, go back to Step 3.
+
 # Commit the new source + compiled exe
 git add src/main/your-helper.py resources/python/your-helper.exe scripts/compile-python.ps1 electron-builder.yml
 git commit -m "feat: add your-helper Python monitor"
 
-# Build and smoke-test
-bun run build && bun run start
+# Build and smoke-test the packaged output (catches missing extraResources)
+bun run dist:dir   # faster than full dist — produces dist/win-unpacked/
+# Then launch dist/win-unpacked/"Krevon Station.exe" and verify the feature works
+# WITHOUT dev mode. If it breaks here it will break in the installer too.
 ```
 
 ---
