@@ -18,7 +18,7 @@ import {
   KeyRound, Volume2, Volume1, Volume, VolumeX, Check, RefreshCw,
   ChevronRight, ChevronLeft, Speaker, Headphones, MonitorSpeaker,
   SlidersHorizontal, Camera, Lock, Power, Settings, User,
-  Moon, RotateCcw, PowerOff,
+  Moon, RotateCcw, PowerOff, Bluetooth, BluetoothOff,
 } from 'lucide-react'
 
 // ── Motion presets ────────────────────────────────────────────────────────────
@@ -245,58 +245,103 @@ function DrawerHeader({
 
 function MainPage({
   volume, muted, network, wifiEnabled, wifiToggling,
+  btEnabled, btToggling, btConnectedName,
   onVolumeChange, onVolumeCommit, onMuteToggle,
   onWifiToggle, onGoSound, onGoWifi,
+  onBtToggle, onGoBluetooth,
 }: {
   volume: number
   muted: boolean
   network: NetworkState
   wifiEnabled: boolean
   wifiToggling: boolean
+  btEnabled: boolean
+  btToggling: boolean
+  btConnectedName: string | null
   onVolumeChange(v: number): void
   onVolumeCommit(v: number): void
   onMuteToggle(): void
   onWifiToggle(): void
   onGoSound(): void
   onGoWifi(): void
+  onBtToggle(): void
+  onGoBluetooth(): void
 }) {
   const displayVol = muted ? 0 : volume
   const isActive = wifiEnabled && network.type === 'wifi'
   const connLabel = network.ssid ?? (wifiEnabled ? 'Not connected' : 'Off')
+  const btLabel = btEnabled ? (btConnectedName ?? 'Not connected') : 'Off'
+  const btActive = btEnabled
 
   return (
     <div className="flex flex-col gap-[10px] p-[14px]">
 
-      {/* ── WiFi pill ────────────────────────────────────────────────────── */}
-      <div className="flex rounded-[14px] overflow-hidden transition-colors duration-200"
-        style={{ background: isActive ? 'rgba(var(--accent-soft-rgb), 0.15)' : 'rgba(255,255,255,0.07)' }}
-      >
-        <button
-          onClick={onWifiToggle}
-          disabled={wifiToggling}
-          className="flex-1 flex items-center gap-[10px] px-[12px] py-[10px] cursor-pointer text-left
-            hover:brightness-110 active:brightness-90 transition-all disabled:opacity-60"
+      {/* ── WiFi + Bluetooth pills (side by side) ──────────────────────── */}
+      <div className="flex gap-[10px]">
+
+        {/* WiFi */}
+        <div className="flex flex-1 rounded-[14px] overflow-hidden transition-colors duration-200"
+          style={{ background: isActive ? 'rgba(var(--accent-soft-rgb), 0.15)' : 'rgba(255,255,255,0.07)' }}
         >
-          <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0 transition-colors"
-            style={{ background: isActive ? 'rgba(var(--accent-soft-rgb), 0.28)' : 'rgba(255,255,255,0.10)' }}
+          <button
+            onClick={onWifiToggle}
+            disabled={wifiToggling}
+            className="flex-1 flex items-center gap-[9px] px-[10px] py-[10px] cursor-pointer text-left
+              hover:brightness-110 active:brightness-90 transition-all disabled:opacity-60 min-w-0"
           >
-            <NetIcon n={network} size={15} color={isActive ? 'var(--accent-light)' : 'rgba(255,255,255,0.65)'} />
-          </div>
-          <div className="flex flex-col gap-[3px]">
-            <span className="text-[13px] font-semibold text-white leading-none">Wi-Fi</span>
-            <span className="text-[11px] text-white/45 leading-none truncate max-w-[150px]">{connLabel}</span>
-          </div>
-        </button>
+            <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 transition-colors"
+              style={{ background: isActive ? 'rgba(var(--accent-soft-rgb), 0.28)' : 'rgba(255,255,255,0.10)' }}
+            >
+              <NetIcon n={network} size={14} color={isActive ? 'var(--accent-light)' : 'rgba(255,255,255,0.65)'} />
+            </div>
+            <div className="flex flex-col gap-[3px] min-w-0">
+              <span className="text-[12px] font-semibold text-white leading-none">Wi-Fi</span>
+              <span className="text-[10px] text-white/45 leading-none truncate">{connLabel}</span>
+            </div>
+          </button>
+          <div className="w-[1px] bg-white/[0.06] my-[9px]" />
+          <button
+            onClick={onGoWifi}
+            className="px-[10px] flex items-center justify-center hover:bg-white/8 active:bg-white/4 transition-colors cursor-pointer shrink-0"
+            aria-label="Wi-Fi settings"
+          >
+            <ChevronRight size={13} color="rgba(255,255,255,0.5)" strokeWidth={2} />
+          </button>
+        </div>
 
-        <div className="w-[1px] bg-white/[0.06] my-[9px]" />
-
-        <button
-          onClick={onGoWifi}
-          className="px-[13px] flex items-center justify-center hover:bg-white/8 active:bg-white/4 transition-colors cursor-pointer"
-          aria-label="Wi-Fi settings"
+        {/* Bluetooth */}
+        <div className="flex flex-1 rounded-[14px] overflow-hidden transition-colors duration-200"
+          style={{ background: btActive ? 'rgba(var(--accent-soft-rgb), 0.15)' : 'rgba(255,255,255,0.07)' }}
         >
-          <ChevronRight size={14} color="rgba(255,255,255,0.5)" strokeWidth={2} />
-        </button>
+          <button
+            onClick={onBtToggle}
+            disabled={btToggling}
+            className="flex-1 flex items-center gap-[9px] px-[10px] py-[10px] cursor-pointer text-left
+              hover:brightness-110 active:brightness-90 transition-all disabled:opacity-60 min-w-0"
+          >
+            <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 transition-colors"
+              style={{ background: btActive ? 'rgba(var(--accent-soft-rgb), 0.28)' : 'rgba(255,255,255,0.10)' }}
+            >
+              {btActive
+                ? <Bluetooth    size={14} strokeWidth={1.75} color="var(--accent-light)" />
+                : <BluetoothOff size={14} strokeWidth={1.75} color="rgba(255,255,255,0.65)" />
+              }
+            </div>
+            <div className="flex flex-col gap-[3px] min-w-0">
+              <span className="text-[12px] font-semibold text-white leading-none">Bluetooth</span>
+              <span className="text-[10px] text-white/45 leading-none truncate">{btLabel}</span>
+            </div>
+          </button>
+          <div className="w-[1px] bg-white/[0.06] my-[9px]" />
+          <button
+            onClick={onGoBluetooth}
+            className="px-[10px] flex items-center justify-center hover:bg-white/8 active:bg-white/4 transition-colors cursor-pointer shrink-0"
+            aria-label="Bluetooth settings"
+          >
+            <ChevronRight size={13} color="rgba(255,255,255,0.5)" strokeWidth={2} />
+          </button>
+        </div>
+
       </div>
 
       {/* ── Volume row ───────────────────────────────────────────────────── */}
@@ -588,6 +633,123 @@ function WifiPage({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PAGE: Bluetooth
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BluetoothPage({
+  devices, btEnabled, btToggling, connectingBtId,
+  onBack, onBtToggle, onScan, onConnect, onDisconnect,
+}: {
+  devices: BluetoothDevice[]
+  btEnabled: boolean
+  btToggling: boolean
+  connectingBtId: string | null
+  onBack(): void
+  onBtToggle(): void
+  onScan(): void
+  onConnect(id: string): void
+  onDisconnect(id: string): void
+}) {
+  const paired = devices.filter(d => d.paired)
+
+  const DeviceRow = ({ d }: { d: BluetoothDevice }) => {
+    const isConn       = d.connected
+    const isConnecting = connectingBtId === d.id && !isConn
+    const busyOther    = connectingBtId !== null && connectingBtId !== d.id && !isConn
+    return (
+      <motion.div
+        layout="position"
+        key={d.id}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1, transition: { ...SI } }}
+        exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.1 } }}
+        className={`flex items-center gap-[10px] px-[10px] py-[10px] rounded-[12px] transition-colors
+          ${busyOther ? 'opacity-40' : ''}`}
+        style={isConn ? { background: 'rgba(var(--accent-soft-rgb), 0.13)' } : undefined}
+      >
+        <div className="w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0"
+          style={{ background: isConn ? 'rgba(var(--accent-soft-rgb), 0.25)' : isConnecting ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)' }}
+        >
+          {isConnecting
+            ? <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}>
+                <RefreshCw size={14} color="rgba(255,255,255,0.7)" strokeWidth={2} />
+              </motion.div>
+            : <Bluetooth size={14} strokeWidth={1.75} color={isConn ? 'var(--accent-light)' : 'rgba(255,255,255,0.6)'} />
+          }
+        </div>
+
+        <div className="flex flex-col gap-[2px] flex-1 min-w-0">
+          <span className={`text-[13px] font-medium leading-none truncate
+            ${isConn ? 'text-white' : isConnecting ? 'text-white/90' : 'text-white/80'}`}>
+            {d.name}
+          </span>
+          {isConn
+            ? <span className="text-[11px] text-white/40 leading-none">Connected</span>
+            : isConnecting
+              ? <span className="text-[11px] text-white/40 leading-none">Connecting…</span>
+              : <span className="text-[11px] text-white/30 leading-none">Not connected</span>
+          }
+        </div>
+
+        {isConn ? (
+          <button
+            onClick={() => onDisconnect(d.id)}
+            className="text-[11px] text-white/35 hover:text-white/60 transition-colors px-[6px] py-[3px]
+              rounded-[6px] hover:bg-white/6 cursor-pointer shrink-0"
+          >
+            Disconnect
+          </button>
+        ) : !isConnecting ? (
+          <button
+            onClick={() => !busyOther && onConnect(d.id)}
+            disabled={!!busyOther}
+            className="text-[11px] text-white/35 hover:text-white/60 transition-colors px-[6px] py-[3px]
+              rounded-[6px] hover:bg-white/6 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Connect
+          </button>
+        ) : null}
+      </motion.div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col">
+      <PageHeader
+        title="Bluetooth"
+        onBack={onBack}
+        right={<Toggle on={btEnabled} onToggle={onBtToggle} disabled={btToggling} />}
+      />
+
+      <div className="drawer-scroll flex flex-col p-[8px]" style={{ maxHeight: 330, overflowY: 'auto' }}>
+        {!btEnabled ? (
+          <p className="text-[11px] text-white/30 text-center py-[24px]">Bluetooth is turned off</p>
+        ) : paired.length === 0 ? (
+          <p className="text-[11px] text-white/25 text-center py-[20px]">No paired devices</p>
+        ) : (
+          <AnimatePresence initial={false}>
+            {paired.map(d => <DeviceRow key={d.id} d={d} />)}
+          </AnimatePresence>
+        )}
+      </div>
+
+      {btEnabled && (
+        <div className="flex items-center justify-end gap-[6px] px-[14px] py-[9px] border-t border-white/[0.06]">
+          <button
+            onClick={onScan}
+            className="flex items-center gap-[6px] px-[10px] py-[5px] rounded-[8px]
+              hover:bg-white/7 active:bg-white/4 transition-colors cursor-pointer"
+          >
+            <RefreshCw size={12} color="rgba(255,255,255,0.4)" strokeWidth={2} />
+            <span className="text-[11px] text-white/40">Refresh</span>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PAGE: Power
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -631,7 +793,7 @@ function PowerPage({ onBack, onAction }: {
 // Root — manages all state + page navigation
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Page = 'main' | 'sound' | 'wifi' | 'power'
+type Page = 'main' | 'sound' | 'wifi' | 'bluetooth' | 'power'
 
 export function Drawer() {
   const [visible, setVisible] = useState(false)
@@ -649,6 +811,12 @@ export function Drawer() {
   const [networks, setNetworks] = useState<WifiNetwork[]>([])
   const [scanning, setScanning] = useState(false)
   const [connectingSSID, setConnectingSSID] = useState<string | null>(null)
+
+  // ── Bluetooth page state ──────────────────────────────────────────────────
+  const [btEnabled, setBtEnabled] = useState(false)
+  const [btToggling, setBtToggling] = useState(false)
+  const [btDevices, setBtDevices] = useState<BluetoothDevice[]>([])
+  const [connectingBtId, setConnectingBtId] = useState<string | null>(null)
 
   // ── Sound page state ──────────────────────────────────────────────────────
   const [devices, setDevices] = useState<AudioDevice[]>([])
@@ -690,6 +858,13 @@ export function Drawer() {
     window.island.getWifiState().then(s => setWifiEnabled(s.enabled)).catch(() => { })
   }, [])
 
+  const refreshBtState = useCallback(() => {
+    window.island.scanBluetoothDevices(false).then(result => {
+      setBtEnabled(result.enabled)
+      setBtDevices(result.devices ?? [])
+    }).catch(() => { })
+  }, [])
+
   // ── Close handler ─────────────────────────────────────────────────────────
   const closeDrawer = useCallback(() => {
     if (closeTimer.current !== null) return
@@ -711,6 +886,7 @@ export function Drawer() {
       setSessionIcons({})
       setVisible(true)
       refreshWifiState()
+      refreshBtState()
     })
 
     const unsubForceClose = window.island.onDrawerForceClose(() => closeDrawer())
@@ -722,6 +898,7 @@ export function Drawer() {
     })
 
     refreshWifiState()
+    refreshBtState()
 
     window.island.getUserInfo().then(info => setUserInfo({ avatar: info.avatar })).catch(() => { })
 
@@ -815,6 +992,51 @@ export function Drawer() {
     handleScan(false)
   }
 
+  // ── Bluetooth handlers ────────────────────────────────────────────────────
+  const handleBtToggle = async () => {
+    if (btToggling) return
+    setBtToggling(true)
+    const next = !btEnabled
+    setBtEnabled(next)
+    try { await window.island.setBluetoothEnabled(next) } catch { setBtEnabled(!next) }
+    setBtToggling(false)
+    if (next) handleBtScan()
+  }
+
+  const handleBtScan = useCallback(async () => {
+    try {
+      const result = await window.island.scanBluetoothDevices(false)
+      setBtEnabled(result.enabled)
+      setBtDevices(result.devices ?? [])
+    } catch { /**/ }
+  }, [])
+
+  useEffect(() => {
+    if (page !== 'bluetooth') return
+    const id = setInterval(() => {
+      if (connectingBtId) return
+      handleBtScan()
+    }, 7_000)
+    return () => clearInterval(id)
+  }, [page, connectingBtId, handleBtScan])
+
+  const handleBtConnect = async (id: string) => {
+    if (connectingBtId) return
+    setConnectingBtId(id)
+    try { await window.island.connectBluetooth(id) } catch { /**/ }
+    // BT negotiation takes 1–3 s after the IPC resolves — wait then rescan for real state
+    await new Promise<void>(res => setTimeout(res, 3000))
+    setConnectingBtId(null)
+    handleBtScan()
+  }
+
+  const handleBtDisconnect = async (id: string) => {
+    // Optimistic disconnect is fine — OS drops the link immediately
+    setBtDevices(prev => prev.map(d => d.id === id ? { ...d, connected: false } : d))
+    try { await window.island.disconnectBluetooth(id) } catch { /**/ }
+    setTimeout(() => handleBtScan(), 800)
+  }
+
   // ── Sound handlers ────────────────────────────────────────────────────────
   const handlePickDevice = (id: string) => {
     setActiveDevId(id)
@@ -881,6 +1103,10 @@ export function Drawer() {
       refreshWifiState()
       if (wifiEnabled) handleScan(true)
     }
+
+    if (p === 'bluetooth') {
+      handleBtScan()
+    }
   }
 
   const goBack = () => setPage('main')
@@ -889,11 +1115,21 @@ export function Drawer() {
   return (
     <div className="w-full h-full relative pointer-events-none select-none">
 
+      {/* Full-window click-outside capture — closes drawer when transparent window area is clicked.
+          Rendered before the card so the card (higher DOM order = higher z) wins on overlap.
+          Card's onMouseDown stopPropagation prevents this from firing for card clicks. */}
+      {visible && (
+        <div
+          className="absolute inset-0 pointer-events-auto"
+          onMouseDown={() => window.island.requestCloseDrawer()}
+        />
+      )}
+
       <AnimatePresence>
         {visible && (
           <motion.div
             key="drawer-card"
-            className="drawer-card absolute top-[6px] right-[8px] w-[320px] pointer-events-auto overflow-hidden"
+            className="drawer-card absolute top-[6px] right-[8px] w-[360px] pointer-events-auto overflow-hidden"
             initial={{ opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0, ...(targetH !== null ? { height: targetH } : {}) }}
             exit={CARD_EXIT}
@@ -925,12 +1161,17 @@ export function Drawer() {
                     network={network}
                     wifiEnabled={wifiEnabled}
                     wifiToggling={wifiToggling}
+                    btEnabled={btEnabled}
+                    btToggling={btToggling}
+                    btConnectedName={btDevices.find(d => d.connected)?.name ?? null}
                     onVolumeChange={handleVolumeChange}
                     onVolumeCommit={handleVolumeCommit}
                     onMuteToggle={handleMuteToggle}
                     onWifiToggle={handleWifiToggle}
                     onGoSound={() => goTo('sound')}
                     onGoWifi={() => goTo('wifi')}
+                    onBtToggle={handleBtToggle}
+                    onGoBluetooth={() => goTo('bluetooth')}
                   />
                 </motion.div>
               )}
@@ -967,6 +1208,22 @@ export function Drawer() {
                     onWifiToggle={handleWifiToggle}
                     onScan={handleScan}
                     onConnect={handleConnect}
+                  />
+                </motion.div>
+              )}
+
+              {page === 'bluetooth' && (
+                <motion.div key="bluetooth" initial={PAGE_IN} animate={PAGE_MID} exit={PAGE_OUT}>
+                  <BluetoothPage
+                    devices={btDevices}
+                    btEnabled={btEnabled}
+                    btToggling={btToggling}
+                    connectingBtId={connectingBtId}
+                    onBack={goBack}
+                    onBtToggle={handleBtToggle}
+                    onScan={handleBtScan}
+                    onConnect={handleBtConnect}
+                    onDisconnect={handleBtDisconnect}
                   />
                 </motion.div>
               )}

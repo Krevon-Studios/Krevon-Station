@@ -123,6 +123,13 @@ contextBridge.exposeInMainWorld('island', {
   connectWifi:      (ssid: string)       => ipcRenderer.invoke('connect-wifi', ssid),
   getWifiState:     ()                   => ipcRenderer.invoke('get-wifi-state'),
 
+  // ── Bluetooth control ───────────────────────────────────────────────────────
+  scanBluetoothDevices: (force: boolean = true) => ipcRenderer.invoke('scan-bluetooth-devices', force),
+  setBluetoothEnabled:  (enable: boolean)        => ipcRenderer.invoke('set-bluetooth-enabled', enable),
+  getBluetoothState:    ()                        => ipcRenderer.invoke('get-bluetooth-state'),
+  connectBluetooth:     (id: string)              => ipcRenderer.invoke('connect-bluetooth', id),
+  disconnectBluetooth:  (id: string)              => ipcRenderer.invoke('disconnect-bluetooth', id),
+
   // ── System actions ─────────────────────────────────────────────────────────
   getUserInfo:     (): Promise<{ avatar: string | null; name: string }> => ipcRenderer.invoke('get-user-info'),
   systemAction:    (action: string): Promise<void> => ipcRenderer.invoke('system-action', action),

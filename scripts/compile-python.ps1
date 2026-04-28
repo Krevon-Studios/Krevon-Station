@@ -38,8 +38,21 @@ $scriptConfig = @{
         "--hidden-import=winrt.windows.ui.notifications",
         "--hidden-import=winrt.windows.ui.notifications.management"
     )
-    "wifi-scan.py"   = @()
-    "wifi-toggle.py" = @()
+    "wifi-scan.py"         = @()
+    "wifi-toggle.py"       = @()
+    # bluetooth-scan uses WinRT for radio state + bthprops.dll for device enumeration
+    "bluetooth-scan.py"    = @(
+        "--collect-all=winrt",
+        "--hidden-import=winrt.windows.devices.radios",
+        "--hidden-import=winrt.windows.foundation"
+    )
+    # bluetooth-toggle uses winrt Radio API — same as Windows Settings (no admin)
+    "bluetooth-toggle.py"  = @(
+        "--collect-all=winrt",
+        "--hidden-import=winrt.windows.devices.radios",
+        "--hidden-import=winrt.windows.foundation"
+    )
+    "bluetooth-connect.py" = @()
 }
 
 Write-Host "Compiling Python scripts into executables..."

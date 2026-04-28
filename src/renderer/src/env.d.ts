@@ -25,6 +25,13 @@ interface WifiNetwork {
   connected: boolean
 }
 
+interface BluetoothDevice {
+  id:        string
+  name:      string
+  connected: boolean
+  paired:    boolean
+}
+
 interface AudioDevice {
   id:   string
   name: string
@@ -78,6 +85,13 @@ interface IslandAPI {
   setWifiEnabled:   (enable: boolean)   => Promise<void>
   connectWifi:      (ssid: string)      => Promise<void>
   getWifiState:     ()                  => Promise<{ enabled: boolean }>
+
+  // Bluetooth control
+  scanBluetoothDevices: (force?: boolean) => Promise<{ enabled: boolean; devices: BluetoothDevice[] }>
+  setBluetoothEnabled:  (enable: boolean) => Promise<void>
+  getBluetoothState:    ()                => Promise<{ enabled: boolean; connected: boolean }>
+  connectBluetooth:     (id: string)      => Promise<void>
+  disconnectBluetooth:  (id: string)      => Promise<void>
 
   // System actions
   getUserInfo:     ()               => Promise<{ avatar: string | null; name: string }>

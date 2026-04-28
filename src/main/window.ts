@@ -91,7 +91,7 @@ export function createIslandWindow(): BrowserWindow {
 export function createDrawerWindow(): BrowserWindow {
   const { bounds } = buildBaseOptions()
 
-  const W = 340
+  const W = 380
   const H = 480
 
   const win = new BrowserWindow({
@@ -127,7 +127,7 @@ export function createDrawerWindow(): BrowserWindow {
 
 export function createNotificationWindow(): BrowserWindow {
   const { bounds } = buildBaseOptions()
-  const W = 340
+  const W = 380
   // Full height from taskbar to screen bottom — prevents bottom clipping when drawer grows
   const H = bounds.height - TASKBAR_H
 

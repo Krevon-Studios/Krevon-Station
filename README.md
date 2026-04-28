@@ -1,6 +1,6 @@
 # Krevon Station
 
-> A macOS-style Dynamic Island for Windows — floating pill at the top of your screen with live Claude Code activity, media controls, WiFi & audio management, virtual desktop switching, and Windows notifications.
+> A macOS-style Dynamic Island for Windows — floating pill at the top of your screen with live Claude Code activity, media controls, WiFi & Bluetooth management, audio mixing, virtual desktop switching, and Windows notifications.
 
 ![idle](https://img.shields.io/badge/state-idle-555)
 ![tool](https://img.shields.io/badge/state-tool__active-7C6AFF)
@@ -15,7 +15,7 @@
 
 Krevon Station puts a smart, always-on-top pill at the top of your screen — similar to the Dynamic Island on iPhone. It stays out of your way (fully click-through) until it has something to show you, then smoothly expands with live information.
 
-It also replaces your system taskbar strip with a sleek full-width bar that shows virtual desktop dots, system tray icons, WiFi signal, and volume — all reactive to your system in real time.
+It also replaces your system taskbar strip with a sleek full-width bar that shows virtual desktop dots, system tray icons, WiFi signal, Bluetooth state, and volume — all reactive to your system in real time.
 
 ---
 
@@ -34,6 +34,7 @@ It also replaces your system taskbar strip with a sleek full-width bar that show
 
 ### Live System Info
 - **WiFi** — signal strength (4 levels), SSID, no-network and no-internet badges
+- **Bluetooth** — on/off and connected-device state shown as a taskbar icon
 - **Audio** — master volume level and mute state, with a 4-level icon
 - **VPN** — key icon appears automatically when a VPN adapter is detected
 - **Windows accent color** — all UI accents follow your color set in Settings → Personalization → Colors, live without restart
@@ -41,6 +42,7 @@ It also replaces your system taskbar strip with a sleek full-width bar that show
 ### Control Drawer
 Click any system tray icon to open an animated panel with:
 - Live WiFi network scanner — scan, see signal strength, connect
+- Bluetooth manager — enable/disable radio, see paired devices, connect/disconnect
 - Real-time per-app audio mixer — adjust volume per application, switch output devices
 
 ### Windows Notifications
@@ -130,9 +132,13 @@ Krevon Station checks for updates silently in the background on every launch. Wh
 - Requires Windows 10 1809 or later
 - Play something in Spotify or a browser — it appears within ~1.5 seconds
 
-**WiFi/audio not showing**
+**WiFi/Bluetooth/audio not showing**
 - These features are self-contained — no Python install required on your machine
 - If icons are stuck, check the system tray → right-click → Quit, then relaunch
+
+**Bluetooth devices not appearing**
+- Only paired devices are shown — pair via Windows Settings first
+- Toggle Bluetooth off then on from the drawer if the list is stale
 
 **Notifications not appearing**
 - Open the drawer first (click a system tray icon) — the notification panel only shows while the drawer is open

@@ -321,7 +321,7 @@ export function NotificationCards() {
         {showPanel && (
           <motion.div
             key="notif-panel"
-            className="absolute right-[8px] w-[320px] pointer-events-auto overflow-hidden"
+            className="absolute right-[8px] w-[360px] pointer-events-auto overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             style={{
               top: panelTop,

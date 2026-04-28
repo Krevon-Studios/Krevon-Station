@@ -25,6 +25,9 @@ src/
 │   ├── notification-monitor.py # Python — Windows Runtime toast notification watcher
 │   ├── wifi-scan.py          # Python — Native wlanapi.dll async network scanner
 │   ├── wifi-toggle.py        # Python — Native wlanapi.dll radio toggle (no admin required)
+│   ├── bluetooth-scan.py     # Python — bthprops.dll device enumeration + WinRT radio state (no admin)
+│   ├── bluetooth-toggle.py   # Python — WinRT Radio API enable/disable via asyncio (no admin)
+│   ├── bluetooth-connect.py  # Python — bthprops.dll BluetoothSetServiceState connect/disconnect
 │   ├── vendor/
 │   │   ├── VirtualDesktopHelper.exe
 │   │   ├── VirtualDesktopHelper.source.cs
@@ -40,7 +43,7 @@ src/
     ├── components/
     │   ├── Island.tsx        # All state UIs + media controls
     │   ├── Taskbar.tsx       # Full-width top bar — desktop dots + live system icons
-    │   ├── Drawer.tsx        # Framer Motion animated WiFi & Audio control panel
+    │   ├── Drawer.tsx        # Framer Motion animated WiFi, Bluetooth & Audio control panel
     │   └── NotificationCards.tsx  # Live Windows notification panel with scroll & dismiss
     └── store/
         └── useIslandStore.ts # State machine + window resize logic
@@ -73,7 +76,8 @@ resources/
 ```powershell
 pip install pycaw psutil pyinstaller `
   winrt-Windows.Foundation winrt-Windows.Foundation.Collections `
-  winrt-Windows.UI.Notifications winrt-Windows.UI.Notifications.Management
+  winrt-Windows.UI.Notifications winrt-Windows.UI.Notifications.Management `
+  winrt-Windows.Devices.Radios winrt-Windows.Devices.Bluetooth winrt-Windows.Devices.Enumeration
 ```
 
 **Install JS deps:**
@@ -98,11 +102,11 @@ Run whenever any `.py` file changes:
 powershell -ExecutionPolicy Bypass -File scripts\compile-python.ps1
 ```
 
-Outputs `resources/python/audio-monitor.exe`, `network-monitor.exe`, `notification-monitor.exe`, `wifi-scan.exe`, `wifi-toggle.exe`.
+Outputs `resources/python/audio-monitor.exe`, `network-monitor.exe`, `notification-monitor.exe`, `wifi-scan.exe`, `wifi-toggle.exe`, `bluetooth-scan.exe`, `bluetooth-toggle.exe`, `bluetooth-connect.exe`.
 
 **These `.exe` files must be committed** — `electron-builder` picks them up via `extraResources` and ships them inside the installer. End users get no Python required.
 
-**Why `--collect-all` flags matter:** `pycaw` uses `comtypes` which generates COM type-library wrappers at build time. Without `--collect-all=comtypes` those stubs are absent on other machines and COM callbacks fail silently. Same applies to `psutil` (binary extensions) and `winrt` (namespace packages).
+**Why `--collect-all` flags matter:** `pycaw` uses `comtypes` which generates COM type-library wrappers at build time. Without `--collect-all=comtypes` those stubs are absent on other machines and COM callbacks fail silently. Same applies to `psutil` (binary extensions) and `winrt` (namespace packages discovered at runtime). `bluetooth-scan` and `bluetooth-toggle` use the WinRT `Windows.Devices.Radios` API (same path as Windows Settings — no admin required) and need `--collect-all=winrt` plus explicit `--hidden-import` for each sub-namespace. `wifi-scan`, `wifi-toggle`, and `bluetooth-connect` are pure ctypes against system DLLs (`wlanapi.dll` / `bthprops.dll`) — no extra flags needed.
 
 **Why no `--noconsole`:** Without `--noconsole`, PyInstaller uses `run.exe` (console-mode bootloader) which keeps `sys.stdout` valid — essential because Electron reads each helper's stdout as a JSON line stream. `windowsHide: true` in Node's `spawn()` already passes `CREATE_NO_WINDOW` to Windows so no console window ever flashes. All scripts also guard against `sys.stdout is None` at the top as a safety net.
 
@@ -358,6 +362,11 @@ App start
 | `get-wifi-state` | Renderer → Main (invoke) | — returns `{ enabled: boolean }` |
 | `set-wifi-enabled` | Renderer → Main (invoke) | `enable: boolean` |
 | `connect-wifi` | Renderer → Main (invoke) | `ssid: string` |
+| `get-bluetooth-state` | Renderer → Main (invoke) | — returns `{ enabled: boolean, connected: boolean }` |
+| `scan-bluetooth-devices` | Renderer → Main (invoke) | `force: boolean` — returns `{ enabled: boolean, connected: boolean, devices: BluetoothDevice[] }` |
+| `set-bluetooth-enabled` | Renderer → Main (invoke) | `enable: boolean` |
+| `connect-bluetooth` | Renderer → Main (invoke) | `id: string` (MAC address) |
+| `disconnect-bluetooth` | Renderer → Main (invoke) | `id: string` (MAC address) |
 | `get-notif-icon` | notifWin → Main (invoke) | `appId: string` — returns base64 PNG or null |
 | `dismiss-notifications` | notifWin → Main (invoke) | `ids: number[]` |
 | `set-session-volume` | Renderer → Main | `(pid, volume, muted)` |
@@ -376,7 +385,7 @@ App start
 |---|---|---|---|
 | `taskbarWin` | Full-width top bar | No | Yes |
 | `islandWin` | Floating pill | No | Yes |
-| `drawerWin` | WiFi/audio drawer | Yes (for blur) | No (shown on demand) |
+| `drawerWin` | WiFi/Bluetooth/audio drawer | Yes (for blur) | No (shown on demand) |
 | `notifWin` | Notification overlay | No | Yes (click-through) |
 
 **Hit-test polling:** Main process polls `screen.getCursorScreenPoint()` at 16ms. Calls `setIgnoreMouseEvents()` each tick — no delta guard — self-heals after lock/sleep/fullscreen. DWM cache invalidation uses lazy 1px resize on first hover after reassert.
@@ -396,6 +405,6 @@ App start
 | Package manager | Bun |
 | Media monitoring | `@coooookies/windows-smtc-monitor` (NAPI native) |
 | Hook server | Express on `127.0.0.1:7823` |
-| System stats | Python 3.14 + `pycaw` + `psutil` + `wlanapi.dll` |
+| System stats | Python 3.14 + `pycaw` + `psutil` + `wlanapi.dll` + `bthprops.dll` |
 | Notifications | Python 3.14 + `winrt` (`UserNotificationListener`) |
 | Auto-update | `electron-updater` via GitHub Releases |

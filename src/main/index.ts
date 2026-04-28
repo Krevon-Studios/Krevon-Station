@@ -147,7 +147,7 @@ app.whenReady().then(() => {
   function syncDrawerPosition() {
     if (drawerWin.isDestroyed()) return
     const { bounds } = screen.getPrimaryDisplay()
-    const W = 340
+    const W = 380
     const H = 480
     drawerWin.setBounds({ x: bounds.x + bounds.width - W, y: bounds.y + TASKBAR_H, width: W, height: H })
   }
@@ -159,7 +159,7 @@ app.whenReady().then(() => {
     if (notifWin.isDestroyed()) return
     const { bounds } = screen.getPrimaryDisplay()
     const H = bounds.height - TASKBAR_H
-    notifWin.setBounds({ x: bounds.x + bounds.width - 340, y: bounds.y + TASKBAR_H, width: 340, height: H })
+    notifWin.setBounds({ x: bounds.x + bounds.width - 380, y: bounds.y + TASKBAR_H, width: 380, height: H })
   }
 
   // ── Notification monitor ──────────────────────────────────────────────────
@@ -220,13 +220,15 @@ app.whenReady().then(() => {
     if (!notifWin.isDestroyed()) {
       syncNotifPosition()
       if (!notifWin.isVisible()) notifWin.show()
-      // Use last known content height (updated by drawer:resize). Falls back to
-      // 60px on first ever open before any resize event — corrects within one frame.
-      const dh = lastDrawerContentHeight
-      notifPanelTop = dh + 6
+      // Set notifPanelTop to sentinel so the hit-test interval keeps notifWin fully
+      // click-through until drawer:resize fires with the real height (within one frame).
+      // Without this, a stale lastDrawerContentHeight (e.g. 60px) makes the interval
+      // set setIgnoreMouseEvents(false) for any y > 66px — notifWin then eats every
+      // click on the drawer card and the click-capture overlay fires requestCloseDrawer.
+      notifPanelTop = 9999
       notifWin.webContents.send('drawer:show', type)
-      notifWin.webContents.send('drawer:height', dh)
-      notifWin.setIgnoreMouseEvents(false)
+      notifWin.webContents.send('drawer:height', lastDrawerContentHeight)
+      notifWin.setIgnoreMouseEvents(true, { forward: true })
     }
   })
 
@@ -263,16 +265,19 @@ app.whenReady().then(() => {
     const clamped = Math.max(Math.ceil(h), 60)
     lastDrawerContentHeight = clamped
     drawerWin.setBounds({
-      x: bounds.x + bounds.width - 340,
+      x: bounds.x + bounds.width - 380,
       y: bounds.y + TASKBAR_H,
-      width: 340,
+      width: 380,
       height: clamped,
     })
-    // Keep notifPanelTop in sync as the drawer card grows/shrinks
+    // Now we have the real card height — update notifPanelTop so the hit-test
+    // interval correctly splits notifWin into click-through (above) vs interactive (below).
     notifPanelTop = clamped + 6
-    // Tell the notif overlay how tall the drawer card is so it can CSS-position below it
     if (!notifWin.isDestroyed()) {
       notifWin.webContents.send('drawer:height', clamped)
+      // Enable notifWin interaction now that notifPanelTop is accurate.
+      // The interval takes over from here, toggling ignore per cursor position.
+      if (drawerOpen) notifWin.setIgnoreMouseEvents(false)
     }
   })
 
@@ -438,6 +443,104 @@ app.whenReady().then(() => {
   ipcMain.handle('connect-wifi', async (_e, ssid: string) => {
     return new Promise<void>((resolve) => {
       exec(`netsh wlan connect name="${ssid}"`, { windowsHide: true }, () => resolve())
+    })
+  })
+
+  // ── IPC: Bluetooth ────────────────────────────────────────────────────────
+
+  ipcMain.handle('get-bluetooth-state', async () => {
+    return new Promise<{ enabled: boolean; connected: boolean }>((resolve) => {
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'bluetooth-scan.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('bluetooth-scan.py')]
+      const args = [...baseArgs, '--state']
+
+      const tryExe = (currentExe: string) => {
+        const proc = spawn(currentExe, args, { windowsHide: true })
+        let stdout = ''
+        proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
+        proc.on('close', () => {
+          try { resolve(JSON.parse(stdout.trim())) } catch { resolve({ enabled: false, connected: false }) }
+        })
+        proc.on('error', () => {
+          if (!app.isPackaged && currentExe === 'py') tryExe('python')
+          else resolve({ enabled: false, connected: false })
+        })
+      }
+      tryExe(exe)
+    })
+  })
+
+  ipcMain.handle('scan-bluetooth-devices', async (_e, force: boolean = true) => {
+    return new Promise<{ enabled: boolean; devices: { id: string; name: string; connected: boolean; paired: boolean }[] }>((resolve) => {
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'bluetooth-scan.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('bluetooth-scan.py')]
+      const args = force ? baseArgs : [...baseArgs, '--no-scan']
+
+      const tryExe = (currentExe: string) => {
+        const proc = spawn(currentExe, args, { windowsHide: true })
+        let stdout = ''
+        proc.stdout.on('data', (d: Buffer) => (stdout += d.toString()))
+        proc.stderr.on('data', (d: Buffer) => {
+          const msg = d.toString().trim()
+          if (msg) console.error(`[bluetooth-scan:err] ${msg}`)
+        })
+        proc.on('close', () => {
+          try { resolve(JSON.parse(stdout.trim())) } catch { resolve({ enabled: false, devices: [] }) }
+        })
+        proc.on('error', () => {
+          if (!app.isPackaged && currentExe === 'py') tryExe('python')
+          else resolve({ enabled: false, devices: [] })
+        })
+      }
+      tryExe(exe)
+    })
+  })
+
+  ipcMain.handle('set-bluetooth-enabled', async (_e, enable: boolean) => {
+    return new Promise<void>((resolve) => {
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'bluetooth-toggle.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('bluetooth-toggle.py')]
+      const args = [...baseArgs, enable ? '--enable' : '--disable']
+
+      const proc = spawn(exe, args, { windowsHide: true })
+      proc.on('close', () => resolve())
+      proc.on('error', () => resolve())
+    })
+  })
+
+  ipcMain.handle('connect-bluetooth', async (_e, id: string) => {
+    return new Promise<void>((resolve) => {
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'bluetooth-connect.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('bluetooth-connect.py')]
+      const args = [...baseArgs, '--address', id, '--action', 'connect']
+
+      const tryExe = (currentExe: string) => {
+        const proc = spawn(currentExe, args, { windowsHide: true })
+        proc.on('close', () => resolve())
+        proc.on('error', () => {
+          if (!app.isPackaged && currentExe === 'py') tryExe('python')
+          else resolve()
+        })
+      }
+      tryExe(exe)
+    })
+  })
+
+  ipcMain.handle('disconnect-bluetooth', async (_e, id: string) => {
+    return new Promise<void>((resolve) => {
+      const exe = app.isPackaged ? path.join(process.resourcesPath, 'bluetooth-connect.exe') : 'py'
+      const baseArgs = app.isPackaged ? [] : [scriptPath('bluetooth-connect.py')]
+      const args = [...baseArgs, '--address', id, '--action', 'disconnect']
+
+      const tryExe = (currentExe: string) => {
+        const proc = spawn(currentExe, args, { windowsHide: true })
+        proc.on('close', () => resolve())
+        proc.on('error', () => {
+          if (!app.isPackaged && currentExe === 'py') tryExe('python')
+          else resolve()
+        })
+      }
+      tryExe(exe)
     })
   })
 

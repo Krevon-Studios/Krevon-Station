@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Wifi, WifiHigh, WifiLow, WifiZero, GlobeOff,
   Volume2, Volume1, Volume, VolumeX,
-  KeyRound,
+  KeyRound, Bluetooth, BluetoothOff,
 } from 'lucide-react'
 
 function NetworkIcon({ network }: { network: NetworkState }) {
@@ -49,12 +49,20 @@ function AudioIcon({ audio }: { audio: AudioState }) {
 const DEFAULT_NETWORK: NetworkState = { type: 'none', signal: null, ssid: null, hasInternet: false, vpnActive: false }
 const DEFAULT_AUDIO: AudioState = { volume: 50, muted: false }
 
+function BluetoothIcon({ enabled, connected }: { enabled: boolean; connected: boolean }) {
+  if (!enabled) return <BluetoothOff size={15} strokeWidth={2.25} color="rgba(255,255,255,0.25)" />
+  const color = connected ? 'white' : 'rgba(255,255,255,0.6)'
+  return <Bluetooth size={15} strokeWidth={2.25} color={color} />
+}
+
 export function Taskbar() {
   const [count, setCount] = useState(1)
   const [activeIndex, setActiveIndex] = useState(0)
   const [network, setNetwork] = useState<NetworkState>(DEFAULT_NETWORK)
   const [audio, setAudio] = useState<AudioState>(DEFAULT_AUDIO)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [btEnabled, setBtEnabled] = useState(false)
+  const [btConnected, setBtConnected] = useState(false)
 
   // Track last time the drawer was externally closed to debounce re-open
   const lastClosedAt = useRef(0)
@@ -66,13 +74,19 @@ export function Taskbar() {
     window.island.getSystemStats().then(s => { setNetwork(s.network); setAudio(s.audio) })
     const unsubStats = window.island.onSystemStats(s => { setNetwork(s.network); setAudio(s.audio) })
 
+    const refreshBt = () => {
+      window.island.getBluetoothState().then(s => { setBtEnabled(s.enabled); setBtConnected(s.connected) }).catch(() => {})
+    }
+    refreshBt()
+    const btPollId = setInterval(refreshBt, 10_000)
+
     // Listen for drawer closing (from overlay click, Escape, etc.)
     const unsubClose = window.island.onDrawerClosed(() => {
       lastClosedAt.current = Date.now()
       setDrawerOpen(false)
     })
 
-    return () => { unsubDesktops(); unsubStats(); unsubClose() }
+    return () => { unsubDesktops(); unsubStats(); unsubClose(); clearInterval(btPollId) }
   }, [])
 
   const toggleDrawer = (e?: React.MouseEvent) => {
@@ -119,6 +133,7 @@ export function Taskbar() {
           }`}
       >
         {network.vpnActive && <KeyRound size={15} color="white" strokeWidth={2.25} />}
+        <BluetoothIcon enabled={btEnabled} connected={btConnected} />
         <NetworkIcon network={network} />
         <AudioIcon audio={audio} />
       </button>
