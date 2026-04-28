@@ -6,7 +6,7 @@
 !macro customInstall
   ; Write startup registry entry (HKCU — no admin required)
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" \
-    "KrevonStation" "$INSTDIR\Krevon Station.exe"
+    "KrevonStation" '"$INSTDIR\Krevon Station.exe"'
 !macroend
 
 !macro customUninstall
