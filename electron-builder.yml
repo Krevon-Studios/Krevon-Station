@@ -27,6 +27,12 @@ extraResources:
     to: wifi-scan.exe
   - from: resources/python/wifi-toggle.exe
     to: wifi-toggle.exe
+  - from: resources/python/bluetooth-scan.exe
+    to: bluetooth-scan.exe
+  - from: resources/python/bluetooth-toggle.exe
+    to: bluetooth-toggle.exe
+  - from: resources/python/bluetooth-connect.exe
+    to: bluetooth-connect.exe
   - from: src/main/desktop-monitor.ps1
     to: desktop-monitor.ps1
   - from: src/main/switch-desktop.ps1
