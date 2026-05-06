@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Drawer">
+      <UniqueIdentifier>{1B8D7B84-842C-4C7F-8F8D-77883832E22A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Drawer">
+      <UniqueIdentifier>{45E9E535-C8CF-4B04-B0A8-CFB64E70944A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Drawer\Panels">
+      <UniqueIdentifier>{42B124A1-8263-4F24-BBA5-5E20B3DD06BD}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Source Files\Drawer\Core">
+      <UniqueIdentifier>{75C6936A-8932-4458-B71E-AB3C08B7853B}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Source Files\Drawer\Interaction">
+      <UniqueIdentifier>{87D1314C-6E0C-4D5D-B77A-C0F51382D3B4}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Source Files\Drawer\Render">
+      <UniqueIdentifier>{E2CC52CC-2469-451F-81C3-573E9B68927F}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Source Files\Drawer\Model">
+      <UniqueIdentifier>{34F6B6E4-2875-4B39-87D5-D39F93E63D4A}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Drawer\State">
+      <UniqueIdentifier>{27C69B0D-9C6C-4B72-8B46-53603455EC01}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Header Files\Drawer\Core">
+      <UniqueIdentifier>{EA1090FD-2CF0-4C7B-A45E-F08A4E13EC24}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Header Files\Drawer\Interaction">
+      <UniqueIdentifier>{EB48AA12-B67F-4969-9105-F7F7535B508C}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Header Files\Drawer\Render">
+      <UniqueIdentifier>{9340183A-328F-42B4-B31E-37D0C11B2C55}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Header Files\Drawer\State">
+      <UniqueIdentifier>{783886D8-77CF-4908-880F-85776B45CF03}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Header Files\Drawer\Model">
+      <UniqueIdentifier>{895CD738-8EC0-42EA-BC46-0F2547324E44}</UniqueIdentifier>
+    </Filter>
+      <Filter Include="Header Files\Drawer\Panels">
+      <UniqueIdentifier>{BB5D940F-98DE-4B80-9DC9-47AB6F1E1177}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\desktop_preview.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\window.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\shell.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\renderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\media_island.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\virtual_desktop.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\updater.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\audio_status.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\bluetooth_status.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\media_status.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\notification_status.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\status_monitor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\status_types.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\status\wifi_status.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+      <ClInclude Include="include\drawer.h">
+      <Filter>Header Files\Drawer</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\interaction\drawer_animation.h">
+      <Filter>Header Files\Drawer\Interaction</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\interaction\drawer_input.h">
+      <Filter>Header Files\Drawer\Interaction</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\state\drawer_layout.h">
+      <Filter>Header Files\Drawer\State</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\panels\drawer_panel.h">
+      <Filter>Header Files\Drawer\Panels</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\render\drawer_render.h">
+      <Filter>Header Files\Drawer\Render</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\model\drawer_sound_model.h">
+      <Filter>Header Files\Drawer\Model</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\state\drawer_state.h">
+      <Filter>Header Files\Drawer\State</Filter>
+    </ClInclude>
+      <ClInclude Include="src\drawer\core\drawer_wndproc.h">
+      <Filter>Header Files\Drawer\Core</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\desktop_preview.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\window.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\shell.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\renderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\media_island.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\virtual_desktop.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\updater.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\status\audio_status.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\status\bluetooth_status.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\status\media_status.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\status\notification_status.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\status\status_monitor.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\status\wifi_status.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\core\drawer.cpp">
+      <Filter>Source Files\Drawer\Core</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\interaction\drawer_animation.cpp">
+      <Filter>Source Files\Drawer\Interaction</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\render\drawer_app_icons.cpp">
+      <Filter>Source Files\Drawer\Render</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\render\drawer_notifications.cpp">
+      <Filter>Source Files\Drawer\Render</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\core\drawer_init.cpp">
+      <Filter>Source Files\Drawer\Core</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\interaction\drawer_input.cpp">
+      <Filter>Source Files\Drawer\Interaction</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\panels\drawer_panel_main.cpp">
+      <Filter>Source Files\Drawer\Panels</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\panels\drawer_panel_power.cpp">
+      <Filter>Source Files\Drawer\Panels</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\panels\drawer_panel_sound.cpp">
+      <Filter>Source Files\Drawer\Panels</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\panels\drawer_panel_wifi.cpp">
+      <Filter>Source Files\Drawer\Panels</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\panels\drawer_panel_bluetooth.cpp">
+      <Filter>Source Files\Drawer\Panels</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\render\drawer_render.cpp">
+      <Filter>Source Files\Drawer\Render</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\model\drawer_sound_model.cpp">
+      <Filter>Source Files\Drawer\Model</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\state\drawer_state.cpp">
+      <Filter>Source Files\Drawer\State</Filter>
+    </ClCompile>
+      <ClCompile Include="src\drawer\core\drawer_wndproc.cpp">
+      <Filter>Source Files\Drawer\Core</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Package.appxmanifest" />
+    <None Include="app.manifest" />
+    <None Include="assets\logo_solid.ico" />
+  </ItemGroup>
+</Project>

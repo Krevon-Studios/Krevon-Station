@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="KrevonStation.vcxproj" Id="bb3c45a2-beec-4833-a9bf-d66ce282c279" />
+</Solution>

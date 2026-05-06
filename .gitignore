@@ -1,12 +1,35 @@
-node_modules
-out
-dist
-.DS_Store
-*.local
-*.tsbuildinfo
+# Visual Studio / local IDE state
+/.vs/
+*.vcxproj.user
+*.suo
 
-# PyInstaller work/cache directories (compiled .exe outputs go to resources/python/ and ARE committed)
-build/pyinstaller/
+# Build outputs
+/x64/
+/KrevonStation/
+/Debug/
+/Release/
+/artifacts/
+/dist/
+/.packaging/
 
-# Embeddable Python interpreter archive (dev artifact, not shipped)
-resources/python.zip
+# Sparse package / app identity metadata
+/microsoft.system.package.metadata/
+
+# Agent worktrees / local automation state
+/.claude/
+
+# MSVC / linker intermediates
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.ipch
+*.recipe
+*.lastbuildstate
+*.log
+
+# MSBuild tracking
+*.tlog
+
+# Optional local caches
+*.cache
