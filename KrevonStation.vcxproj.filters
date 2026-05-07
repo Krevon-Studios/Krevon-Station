@@ -56,6 +56,9 @@
     <ClInclude Include="include\desktop_preview.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\accent_theme.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\window.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -125,6 +128,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\desktop_preview.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\accent_theme.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\main.cpp">

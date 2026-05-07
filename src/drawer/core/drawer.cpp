@@ -6,6 +6,7 @@
 #include "../render/drawer_render.h"
 #include "../model/drawer_sound_model.h"
 #include "drawer_wndproc.h"
+#include "accent_theme.h"
 #include "status/notification_status.h"
 
 #pragma comment(lib, "dwrite.lib")
@@ -280,6 +281,13 @@ void Drawer_UpdateNotifications(const std::vector<NotificationInfo>& notificatio
 {
     SyncNotificationPanelLists(notifications);
     if (g_open) Render();
+}
+
+void Drawer_UpdateAccentTheme()
+{
+    UpdateAccentColors();
+    if (g_open)
+        Render();
 }
 
 bool Drawer_IsOpen()

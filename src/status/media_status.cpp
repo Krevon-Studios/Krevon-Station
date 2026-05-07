@@ -3,7 +3,9 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <thread>
@@ -57,7 +59,7 @@ struct MediaStatusProviderImpl
     std::vector<MediaSessionInfo> cachedInfos;
     int currentIndex = -1;
     int selectedIndex = -1;
-    std::wstring selectedSourceId;
+    std::wstring selectedSessionId;
 
     std::thread worker;
     std::mutex workerMutex;
@@ -65,6 +67,8 @@ struct MediaStatusProviderImpl
     std::deque<MediaWorkItem> workQueue;
     bool workerStop = false;
     bool refreshQueued = false;
+    int followUpRefreshes = 0;
+    std::chrono::steady_clock::time_point nextFollowUpRefresh = {};
 };
 
 namespace
@@ -102,6 +106,25 @@ namespace
         }
     }
 
+    ULONGLONG TimelineSnapshotTickFromLastUpdated(winrt::Windows::Foundation::DateTime const& lastUpdated)
+    {
+        try
+        {
+            const auto now = winrt::clock::now();
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastUpdated).count();
+            if (elapsed < 0)
+                elapsed = 0;
+
+            const ULONGLONG nowTick = GetTickCount64();
+            const ULONGLONG elapsedTick = static_cast<ULONGLONG>(elapsed);
+            return elapsedTick >= nowTick ? nowTick : nowTick - elapsedTick;
+        }
+        catch (...)
+        {
+            return GetTickCount64();
+        }
+    }
+
     std::vector<BYTE> ReadThumbnailBytes(winrt::Windows::Storage::Streams::IRandomAccessStreamReference const& thumbnail)
     {
         if (!thumbnail)
@@ -132,6 +155,7 @@ namespace
 
     std::wstring FriendlyAppName(winrt::hstring const& sourceAppUserModelId)
     {
+        // Packaged (UWP/MSIX) apps: Windows gives us the display name directly.
         try
         {
             auto appInfo = winrt::Windows::ApplicationModel::AppInfo::GetFromAppUserModelId(sourceAppUserModelId);
@@ -146,20 +170,119 @@ namespace
         {
         }
 
-        std::wstring fallback = ToWString(sourceAppUserModelId);
-        const size_t bang = fallback.find(L'!');
+        std::wstring id = ToWString(sourceAppUserModelId);
+
+        // Strip "Package!AppId" suffix used by packaged apps.
+        const size_t bang = id.find(L'!');
         if (bang != std::wstring::npos)
-            fallback.resize(bang);
-        const size_t dot = fallback.rfind(L'.');
-        if (dot != std::wstring::npos && dot + 1 < fallback.size())
-            fallback = fallback.substr(dot + 1);
-        return fallback.empty() ? L"Media" : fallback;
+            id.resize(bang);
+
+        // Extract just the filename for path-based AUMIDs ("C:\...\zen.exe" → "zen.exe").
+        const size_t lastSep = id.find_last_of(L"\\/");
+        std::wstring name = (lastSep != std::wstring::npos) ? id.substr(lastSep + 1) : id;
+
+        // Strip .exe extension.
+        if (name.size() > 4 && _wcsicmp(name.c_str() + name.size() - 4, L".exe") == 0)
+            name.resize(name.size() - 4);
+
+        // Known app table — checked case-insensitively against the cleaned name
+        // and against the full id (catches "com.vendor.app" style AUMIDs).
+        static const struct { const wchar_t* match; const wchar_t* friendly; } kApps[] =
+        {
+            { L"zen",                           L"Zen Browser"          },
+            { L"firefox",                       L"Firefox"              },
+            { L"waterfox",                      L"Waterfox"             },
+            { L"librewolf",                     L"LibreWolf"            },
+            { L"chrome",                        L"Chrome"               },
+            { L"msedge",                        L"Edge"                 },
+            { L"brave",                         L"Brave"                },
+            { L"opera",                         L"Opera"                },
+            { L"vivaldi",                       L"Vivaldi"              },
+            { L"spotify",                       L"Spotify"              },
+            // YouTube Music Desktop App ships various AUMIDs depending on version/install.
+            { L"YouTube Music Desktop App",     L"YouTube Music"        },
+            { L"com.ytmdesktop.ytmdesktop",     L"YouTube Music"        },
+            { L"ytmdesktop",                    L"YouTube Music"        },
+            { L"vlc",                           L"VLC"                  },
+            { L"wmplayer",                      L"Windows Media Player" },
+            { L"winamp",                        L"Winamp"               },
+            { L"foobar2000",                    L"foobar2000"           },
+            { L"mpc-hc",                        L"MPC-HC"               },
+            { L"mpc-hc64",                      L"MPC-HC"               },
+            { L"mpc-be",                        L"MPC-BE"               },
+            { L"mpc-be64",                      L"MPC-BE"               },
+            { L"aimp",                          L"AIMP"                 },
+            { L"musicbee",                      L"MusicBee"             },
+            { L"tidal",                         L"TIDAL"                },
+        };
+
+        for (const auto& entry : kApps)
+        {
+            if (_wcsicmp(name.c_str(), entry.match) == 0 ||
+                _wcsicmp(id.c_str(),  entry.match) == 0)
+                return entry.friendly;
+        }
+
+        // GUID-style AUMID ({XXXXXXXX-...}) — not a useful display name.
+        if (!name.empty() && name[0] == L'{')
+            return L"Media";
+
+        // For reverse-DNS AUMIDs ("com.vendor.app"), use the last component.
+        const size_t dot = name.rfind(L'.');
+        if (dot != std::wstring::npos && dot + 1 < name.size())
+            name = name.substr(dot + 1);
+
+        // Capitalize first letter.
+        if (!name.empty() && name[0] >= L'a' && name[0] <= L'z')
+            name[0] = name[0] - L'a' + L'A';
+
+        return name.empty() ? L"Media" : name;
+    }
+
+    uintptr_t SessionIdentityValue(MediaWinrtSession const& session)
+    {
+        if (!session)
+            return 0;
+
+        try
+        {
+            auto unknown = session.as<::IUnknown>();
+            return reinterpret_cast<uintptr_t>(unknown.get());
+        }
+        catch (...)
+        {
+            return 0;
+        }
+    }
+
+    std::wstring BuildSessionId(MediaWinrtSession const& session, int index)
+    {
+        std::wstring sourceId;
+        try
+        {
+            sourceId = ToWString(session.SourceAppUserModelId());
+        }
+        catch (...)
+        {
+        }
+
+        const uintptr_t identity = SessionIdentityValue(session);
+        if (identity != 0)
+            return sourceId + L"#" + std::to_wstring(identity);
+
+        return sourceId + L"#" + std::to_wstring(index);
     }
 
     bool SameSession(MediaWinrtSession const& a, MediaWinrtSession const& b)
     {
         if (!a || !b)
             return false;
+
+        const uintptr_t aIdentity = SessionIdentityValue(a);
+        const uintptr_t bIdentity = SessionIdentityValue(b);
+        if (aIdentity != 0 && bIdentity != 0)
+            return aIdentity == bIdentity;
+
         try
         {
             return a.SourceAppUserModelId() == b.SourceAppUserModelId();
@@ -227,20 +350,14 @@ namespace
 
     int ClampSelectedIndex(MediaStatusProviderImpl& impl)
     {
-        if (!impl.selectedSourceId.empty())
+        if (!impl.selectedSessionId.empty())
         {
             for (size_t i = 0; i < impl.sessions.size(); ++i)
             {
-                try
-                {
-                    if (ToWString(impl.sessions[i].SourceAppUserModelId()) == impl.selectedSourceId)
-                        return static_cast<int>(i);
-                }
-                catch (...)
-                {
-                }
+                if (BuildSessionId(impl.sessions[i], static_cast<int>(i)) == impl.selectedSessionId)
+                    return static_cast<int>(i);
             }
-            impl.selectedSourceId.clear();
+            impl.selectedSessionId.clear();
         }
 
         if (impl.selectedIndex >= 0 && impl.selectedIndex < static_cast<int>(impl.sessions.size()))
@@ -249,12 +366,19 @@ namespace
         return impl.currentIndex >= 0 ? impl.currentIndex : (impl.sessions.empty() ? -1 : 0);
     }
 
+    bool SameMediaIdentity(const MediaSessionInfo& lhs, const MediaSessionInfo& rhs)
+    {
+        return lhs.sourceAppUserModelId == rhs.sourceAppUserModelId
+            && lhs.title == rhs.title
+            && lhs.subtitle == rhs.subtitle;
+    }
+
     MediaSessionInfo ConvertSession(MediaWinrtSession const& session, int index, bool isCurrent)
     {
         MediaSessionInfo info;
         const auto source = session.SourceAppUserModelId();
         info.sourceAppUserModelId = ToWString(source);
-        info.sessionId = info.sourceAppUserModelId + L"#" + std::to_wstring(index);
+        info.sessionId = BuildSessionId(session, index);
         info.appName = FriendlyAppName(source);
         info.isCurrent = isCurrent;
 
@@ -270,20 +394,6 @@ namespace
         catch (...)
         {
             info.playbackState = MediaPlaybackState::None;
-        }
-
-        try
-        {
-            const auto timeline = session.GetTimelineProperties();
-            info.timelineStartTicks = timeline.StartTime().count();
-            info.timelineEndTicks = timeline.EndTime().count();
-            info.timelinePositionTicks = timeline.Position().count();
-            info.timelineSnapshotMs = GetTickCount64();
-            info.hasTimeline = info.timelineEndTicks > info.timelineStartTicks;
-        }
-        catch (...)
-        {
-            info.hasTimeline = false;
         }
 
         try
@@ -304,6 +414,20 @@ namespace
         if (info.title.empty())
             info.title = info.appName.empty() ? L"Media" : info.appName;
 
+        try
+        {
+            const auto timeline = session.GetTimelineProperties();
+            info.timelineStartTicks = timeline.StartTime().count();
+            info.timelineEndTicks = timeline.EndTime().count();
+            info.timelinePositionTicks = timeline.Position().count();
+            info.timelineSnapshotMs = TimelineSnapshotTickFromLastUpdated(timeline.LastUpdatedTime());
+            info.hasTimeline = info.timelineEndTicks > info.timelineStartTicks;
+        }
+        catch (...)
+        {
+            info.hasTimeline = false;
+        }
+
         return info;
     }
 
@@ -315,9 +439,11 @@ namespace
         return impl.sessions[index];
     }
 
-    void RefreshCacheOnWorker(MediaStatusProviderImpl& impl)
+    bool RefreshCacheOnWorker(MediaStatusProviderImpl& impl)
     {
         std::scoped_lock lock(impl.mutex);
+        bool needsFollowUp = false;
+        const std::vector<MediaSessionInfo> previousInfos = impl.cachedInfos;
         impl.cachedInfos.clear();
         impl.sessions.clear();
         impl.currentIndex = -1;
@@ -326,7 +452,7 @@ namespace
         if (!impl.manager)
         {
             ClearHooks(impl);
-            return;
+            return false;
         }
 
         try
@@ -335,13 +461,35 @@ namespace
             impl.sessions.reserve(sessions.Size());
             for (auto const& session : sessions)
                 impl.sessions.push_back(session);
+            if (impl.sessions.size() != previousInfos.size())
+                needsFollowUp = true;
 
             impl.currentIndex = FindCurrentIndex(impl.manager, impl.sessions);
             impl.selectedIndex = ClampSelectedIndex(impl);
 
             impl.cachedInfos.reserve(impl.sessions.size());
             for (size_t i = 0; i < impl.sessions.size(); ++i)
-                impl.cachedInfos.push_back(ConvertSession(impl.sessions[i], static_cast<int>(i), static_cast<int>(i) == impl.currentIndex));
+            {
+                MediaSessionInfo info = ConvertSession(impl.sessions[i], static_cast<int>(i), static_cast<int>(i) == impl.currentIndex);
+                auto previousIt = std::find_if(previousInfos.begin(), previousInfos.end(),
+                    [&](const MediaSessionInfo& previous) { return previous.sessionId == info.sessionId; });
+
+                if (previousIt == previousInfos.end())
+                {
+                    info.mediaPropertiesChangedMs = GetTickCount64();
+                }
+                else if (!SameMediaIdentity(*previousIt, info))
+                {
+                    info.mediaPropertiesChangedMs = GetTickCount64();
+                    needsFollowUp = true;
+                }
+                else
+                {
+                    info.mediaPropertiesChangedMs = previousIt->mediaPropertiesChangedMs;
+                }
+
+                impl.cachedInfos.push_back(std::move(info));
+            }
 
             RebuildHooks(impl);
         }
@@ -353,6 +501,19 @@ namespace
             impl.selectedIndex = -1;
             ClearHooks(impl);
         }
+        return needsFollowUp;
+    }
+
+    void ScheduleFollowUpRefreshes(MediaStatusProviderImpl& impl)
+    {
+        std::scoped_lock lock(impl.workerMutex);
+        if (impl.workerStop)
+            return;
+
+        impl.followUpRefreshes = (std::max)(impl.followUpRefreshes, 8);
+        if (impl.nextFollowUpRefresh == std::chrono::steady_clock::time_point{})
+            impl.nextFollowUpRefresh = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+        impl.workerCv.notify_one();
     }
 
     void QueueWork(MediaStatusProviderImpl* impl, MediaWorkKind kind, long long positionTicks = 0)
@@ -448,20 +609,65 @@ namespace
         for (;;)
         {
             MediaWorkItem item;
+            bool hasItem = false;
             {
                 std::unique_lock lock(impl->workerMutex);
-                impl->workerCv.wait(lock, [&]() { return impl->workerStop || !impl->workQueue.empty(); });
-                if (impl->workerStop)
-                    return;
-                item = impl->workQueue.front();
-                impl->workQueue.pop_front();
-                if (item.kind == MediaWorkKind::Refresh)
-                    impl->refreshQueued = false;
+                for (;;)
+                {
+                    if (impl->workerStop)
+                        return;
+
+                    if (!impl->workQueue.empty())
+                    {
+                        item = impl->workQueue.front();
+                        impl->workQueue.pop_front();
+                        if (item.kind == MediaWorkKind::Refresh)
+                            impl->refreshQueued = false;
+                        hasItem = true;
+                        break;
+                    }
+
+                    if (impl->followUpRefreshes > 0)
+                    {
+                        const auto now = std::chrono::steady_clock::now();
+                        if (now >= impl->nextFollowUpRefresh)
+                        {
+                            item.kind = MediaWorkKind::Refresh;
+                            --impl->followUpRefreshes;
+                            impl->nextFollowUpRefresh = impl->followUpRefreshes > 0
+                                ? now + std::chrono::milliseconds(300)
+                                : std::chrono::steady_clock::time_point{};
+                            hasItem = true;
+                            break;
+                        }
+
+                        impl->workerCv.wait_until(lock, impl->nextFollowUpRefresh);
+                    }
+                    else
+                    {
+                        // Timed wait: poll GSMTC periodically even without events.
+                        // Browsers (e.g. Chrome/YouTube) may delay MediaPropertiesChanged
+                        // or TimelinePropertiesChanged by several seconds on video switch,
+                        // so we must not block indefinitely.
+                        if (impl->workerCv.wait_for(lock, std::chrono::seconds(2)) == std::cv_status::timeout
+                            && !impl->workerStop)
+                        {
+                            item.kind = MediaWorkKind::Refresh;
+                            hasItem = true;
+                            break;
+                        }
+                    }
+                }
             }
+
+            if (!hasItem)
+                continue;
 
             if (item.kind == MediaWorkKind::Refresh)
             {
-                RefreshCacheOnWorker(*impl);
+                const bool needsFollowUp = RefreshCacheOnWorker(*impl);
+                if (needsFollowUp)
+                    ScheduleFollowUpRefreshes(*impl);
                 NotifyReady(impl->hwnd);
             }
             else
@@ -495,6 +701,8 @@ void MediaStatus_Shutdown(MediaStatusProvider& provider)
         provider.impl->workerStop = true;
         provider.impl->workQueue.clear();
         provider.impl->refreshQueued = false;
+        provider.impl->followUpRefreshes = 0;
+        provider.impl->nextFollowUpRefresh = {};
     }
     provider.impl->workerCv.notify_one();
     if (provider.impl->worker.joinable())
@@ -510,7 +718,7 @@ void MediaStatus_Shutdown(MediaStatusProvider& provider)
         provider.impl->cachedInfos.clear();
         provider.impl->currentIndex = -1;
         provider.impl->selectedIndex = -1;
-        provider.impl->selectedSourceId.clear();
+        provider.impl->selectedSessionId.clear();
         provider.impl->hwnd = nullptr;
     }
 
@@ -548,14 +756,7 @@ bool MediaStatus_SelectSession(MediaStatusProvider& provider, int index)
             return false;
 
         provider.impl->selectedIndex = index;
-        try
-        {
-            provider.impl->selectedSourceId = ToWString(provider.impl->sessions[index].SourceAppUserModelId());
-        }
-        catch (...)
-        {
-            provider.impl->selectedSourceId.clear();
-        }
+        provider.impl->selectedSessionId = BuildSessionId(provider.impl->sessions[index], index);
     }
 
     Notify(provider.impl->hwnd);

@@ -1,4 +1,5 @@
 #include "media_island.h"
+#include "accent_theme.h"
 #include "renderer.h"
 #include "status/status_monitor.h"
 #include "window.h"
@@ -37,7 +38,12 @@ namespace
     static constexpr float DOT_ACTIVE_W = 16.0f;
     static constexpr float DOT_GAP = 4.0f;
     static constexpr float DOT_MORPH_MS = 180.0f;
-    static constexpr UINT WATCH_TIMER_MS = 33;
+    static constexpr UINT WATCH_TIMER_MS = 50;
+    static constexpr ULONGLONG OPEN_MEDIA_REFRESH_MS = 1000;
+    static constexpr ULONGLONG SEEK_SETTLE_MS = 5000;
+    static constexpr long long TICKS_PER_SECOND = 10000000ll;
+    static constexpr long long SEEK_SETTLE_TOLERANCE_TICKS = TICKS_PER_SECOND * 2;
+    static constexpr long long BACKWARD_JITTER_TOLERANCE_TICKS = TICKS_PER_SECOND * 2;
 
     HWND s_hwnd = nullptr;
     HWND s_navbarHwnd = nullptr;
@@ -56,7 +62,6 @@ namespace
     ComPtr<ID2D1Bitmap1> s_switchFromArt;
     ComPtr<ID2D1Bitmap1> s_switchToArt;
     float s_playingPulsePhase = 0.0f;
-    float s_sliderWavePhase = 0.0f;
     float s_playbackLightT = 0.0f;
     int s_hoverControl = -1;
     int s_hoverDot = -1;
@@ -65,6 +70,7 @@ namespace
     float s_dotFrom[32] = {};
     ULONGLONG s_dotAnimStart = 0;
     float s_dotAnimDurMs = 0.0f;
+    ULONGLONG s_lastOpenMediaRefreshMs = 0;
 
     StatusSnapshot s_snapshot = {};
     ComPtr<ID3D11Device> s_d3d;
@@ -105,6 +111,16 @@ namespace
     D2D1_RECT_F s_nextRect = {};
     D2D1_RECT_F s_progressRect = {};
     D2D1_RECT_F s_dotRects[32] = {};
+    std::wstring s_timelineKey;
+    bool s_timelineValid = false;
+    long long s_timelineStartTicks = 0;
+    long long s_timelineEndTicks = 0;
+    long long s_timelinePositionTicks = 0;
+    ULONGLONG s_timelineSnapshotMs = 0;
+    MediaPlaybackState s_timelinePlaybackState = MediaPlaybackState::None;
+    bool s_seekPending = false;
+    long long s_seekTargetTicks = 0;
+    ULONGLONG s_seekStartMs = 0;
 
     float Clamp01(float v)
     {
@@ -128,6 +144,21 @@ namespace
     bool PtInRectF(const D2D1_RECT_F& r, D2D1_POINT_2F p)
     {
         return p.x >= r.left && p.x <= r.right && p.y >= r.top && p.y <= r.bottom;
+    }
+
+    long long AbsTicks(long long value)
+    {
+        return value < 0 ? -value : value;
+    }
+
+    std::wstring MediaIdentityKey(const MediaSessionInfo& media)
+    {
+        std::wstring key = media.sourceAppUserModelId;
+        key.push_back(L'\x1f');
+        key += media.title;
+        key.push_back(L'\x1f');
+        key += media.subtitle;
+        return key;
     }
 
     size_t HashBytes(const std::vector<BYTE>& bytes)
@@ -154,6 +185,29 @@ namespace
         s_coverKeySize = 0;
         s_mediaSwitchActive = false;
         s_mediaSwitchT = 1.0f;
+        s_timelineKey.clear();
+        s_timelineValid = false;
+        s_seekPending = false;
+    }
+
+    void ClearActiveMediaDisplayState()
+    {
+        s_switchFromMedia = {};
+        s_switchToMedia = {};
+        s_switchFromArt.Reset();
+        s_switchToArt.Reset();
+        s_coverArt.Reset();
+        s_coverSessionId.clear();
+        s_coverKeyHash = 0;
+        s_coverKeySize = 0;
+        s_mediaSwitchActive = false;
+        s_mediaSwitchT = 1.0f;
+        s_dotAnimDurMs = 0.0f;
+        s_timelineKey.clear();
+        s_timelineValid = false;
+        s_seekPending = false;
+        s_progressRect = {};
+        s_lastOpenMediaRefreshMs = 0;
     }
 
     int SelectedIndex()
@@ -359,7 +413,7 @@ namespace
 
     void StartMediaSwitch(const MediaSessionInfo& fromMedia, const MediaSessionInfo& toMedia)
     {
-        if (fromMedia.sessionId == toMedia.sessionId)
+        if (MediaIdentityKey(fromMedia) == MediaIdentityKey(toMedia))
             return;
 
         s_switchFromMedia = fromMedia;
@@ -494,29 +548,153 @@ namespace
         return (std::max)(low, (std::min)(high, value));
     }
 
-    long long CurrentTimelinePositionTicks(const MediaSessionInfo& media)
+    long long TimelinePositionAt(
+        long long start,
+        long long end,
+        long long position,
+        ULONGLONG snapshotMs,
+        MediaPlaybackState playbackState)
     {
-        if (!media.hasTimeline || media.timelineEndTicks <= media.timelineStartTicks)
-            return media.timelinePositionTicks;
+        if (end <= start)
+            return position;
 
-        long long position = media.timelinePositionTicks;
-        if (media.playbackState == MediaPlaybackState::Playing && media.timelineSnapshotMs > 0)
+        if (playbackState == MediaPlaybackState::Playing && snapshotMs > 0)
         {
-            const ULONGLONG elapsedMs = GetTickCount64() - media.timelineSnapshotMs;
+            const ULONGLONG elapsedMs = GetTickCount64() - snapshotMs;
             position += static_cast<long long>(elapsedMs) * 10000ll;
         }
-        return ClampTicks(position, media.timelineStartTicks, media.timelineEndTicks);
+        return ClampTicks(position, start, end);
+    }
+
+    long long RawTimelinePositionTicks(const MediaSessionInfo& media)
+    {
+        return TimelinePositionAt(
+            media.timelineStartTicks,
+            media.timelineEndTicks,
+            media.timelinePositionTicks,
+            media.timelineSnapshotMs,
+            media.playbackState);
+    }
+
+    bool GetDisplayTimeline(const MediaSessionInfo& media, long long& start, long long& end, long long& position)
+    {
+        const std::wstring key = MediaIdentityKey(media);
+        if (s_timelineValid && key == s_timelineKey)
+        {
+            start = s_timelineStartTicks;
+            end = s_timelineEndTicks;
+            position = TimelinePositionAt(
+                s_timelineStartTicks,
+                s_timelineEndTicks,
+                s_timelinePositionTicks,
+                s_timelineSnapshotMs,
+                s_timelinePlaybackState);
+            return end > start;
+        }
+
+        if (!media.hasTimeline || media.timelineEndTicks <= media.timelineStartTicks)
+            return false;
+
+        start = media.timelineStartTicks;
+        end = media.timelineEndTicks;
+        position = RawTimelinePositionTicks(media);
+        return true;
+    }
+
+    void AcceptTimelineSnapshot(const MediaSessionInfo& media, long long position)
+    {
+        s_timelineKey = MediaIdentityKey(media);
+        s_timelineValid = media.hasTimeline && media.timelineEndTicks > media.timelineStartTicks;
+        s_timelineStartTicks = media.timelineStartTicks;
+        s_timelineEndTicks = media.timelineEndTicks;
+        s_timelinePositionTicks = ClampTicks(position, s_timelineStartTicks, s_timelineEndTicks);
+        s_timelineSnapshotMs = GetTickCount64();
+        s_timelinePlaybackState = media.playbackState;
+    }
+
+    void SyncDisplayTimeline(const MediaSessionInfo* media, const MediaSessionInfo*)
+    {
+        if (!media)
+        {
+            s_timelineKey.clear();
+            s_timelineValid = false;
+            s_seekPending = false;
+            return;
+        }
+
+        const std::wstring key = MediaIdentityKey(*media);
+        const bool sameMedia = key == s_timelineKey;
+        if (!sameMedia)
+        {
+            s_seekPending = false;
+
+            // Timeline snapshot predates the track change — still from old video.
+            // Hide slider and wait for fresh TimelinePropertiesChanged data.
+            if (media->mediaPropertiesChangedMs > 0 &&
+                media->timelineSnapshotMs + 200 < media->mediaPropertiesChangedMs)
+            {
+                s_timelineKey = key;
+                s_timelineValid = false;
+                return;
+            }
+        }
+
+        if (!media->hasTimeline || media->timelineEndTicks <= media->timelineStartTicks)
+        {
+            s_timelineKey = key;
+            s_timelineValid = false;
+            return;
+        }
+
+        const long long rawPosition = RawTimelinePositionTicks(*media);
+        if (!sameMedia || !s_timelineValid
+            || s_timelineStartTicks != media->timelineStartTicks
+            || s_timelineEndTicks != media->timelineEndTicks)
+        {
+            AcceptTimelineSnapshot(*media, rawPosition);
+            return;
+        }
+
+        const ULONGLONG now = GetTickCount64();
+        const long long displayPosition = TimelinePositionAt(
+            s_timelineStartTicks,
+            s_timelineEndTicks,
+            s_timelinePositionTicks,
+            s_timelineSnapshotMs,
+            s_timelinePlaybackState);
+
+        if (s_seekPending)
+        {
+            const bool seekSettled = AbsTicks(rawPosition - s_seekTargetTicks) <= SEEK_SETTLE_TOLERANCE_TICKS;
+            const bool seekTimedOut = now - s_seekStartMs >= SEEK_SETTLE_MS;
+            if (!seekSettled && !seekTimedOut)
+            {
+                s_timelinePlaybackState = media->playbackState;
+                return;
+            }
+            s_seekPending = false;
+        }
+
+        long long acceptedPosition = rawPosition;
+        if (media->playbackState == MediaPlaybackState::Playing
+            && rawPosition < displayPosition
+            && displayPosition - rawPosition <= BACKWARD_JITTER_TOLERANCE_TICKS)
+        {
+            acceptedPosition = displayPosition;
+        }
+
+        AcceptTimelineSnapshot(*media, acceptedPosition);
     }
 
     void DrawMediaSlider(const MediaSessionInfo& media, float left, float right, float y, float opacity)
     {
         s_progressRect = {};
-        if (!media.hasTimeline || media.timelineEndTicks <= media.timelineStartTicks)
+        long long start = 0;
+        long long end = 0;
+        long long position = 0;
+        if (!GetDisplayTimeline(media, start, end, position))
             return;
 
-        const long long start = media.timelineStartTicks;
-        const long long end = media.timelineEndTicks;
-        const long long position = CurrentTimelinePositionTicks(media);
         const long long duration = end - start;
         if (duration <= 0)
             return;
@@ -529,29 +707,18 @@ namespace
         const float progress = static_cast<float>(position - start) / static_cast<float>(duration);
         const float fillRight = trackLeft + (trackRight - trackLeft) * Clamp01(progress);
 
-        constexpr float waveAmp = 3.2f;
-        constexpr float waveRadius = 3.1f;
-        constexpr float waveStep = 2.0f;
-        constexpr float waveLength = 31.0f;
-        constexpr float twoPi = 6.2831853f;
-        s_progressRect = D2D1::RectF(trackLeft, y - waveAmp - waveRadius - 3.0f, trackRight, y + waveAmp + waveRadius + 3.0f);
+        s_progressRect = D2D1::RectF(trackLeft, y - 10.0f, trackRight, y + 10.0f);
 
+        const float radius = trackH * 0.5f;
         s_brGrey->SetOpacity(opacity * 0.30f);
-        if (fillRight < trackRight - 0.1f)
-        {
-            const D2D1_RECT_F inactiveRect = D2D1::RectF(fillRight, trackTop, trackRight, trackBottom);
-            s_ctx->FillRoundedRectangle(D2D1::RoundedRect(inactiveRect, trackH * 0.5f, trackH * 0.5f), s_brGrey.Get());
-        }
+        const D2D1_RECT_F trackRect = D2D1::RectF(trackLeft, trackTop, trackRight, trackBottom);
+        s_ctx->FillRoundedRectangle(D2D1::RoundedRect(trackRect, radius, radius), s_brGrey.Get());
 
         if (fillRight > trackLeft + 0.1f)
         {
             s_brAccent->SetOpacity(opacity * 0.95f);
-            for (float x = trackLeft; x <= fillRight; x += waveStep)
-            {
-                const float phase = ((x - trackLeft) / waveLength) * twoPi + s_sliderWavePhase;
-                const float cy = y + sinf(phase) * waveAmp;
-                s_ctx->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x, cy), waveRadius, waveRadius), s_brAccent.Get());
-            }
+            const D2D1_RECT_F playedRect = D2D1::RectF(trackLeft, trackTop, fillRight, trackBottom);
+            s_ctx->FillRoundedRectangle(D2D1::RoundedRect(playedRect, radius, radius), s_brAccent.Get());
         }
 
         s_brAccent->SetOpacity(opacity);
@@ -837,6 +1004,19 @@ namespace
             SetTimer(s_hwnd, WATCH_TIMER, WATCH_TIMER_MS, nullptr);
     }
 
+    void RefreshOpenMediaSnapshot(bool force = false)
+    {
+        if (!s_open)
+            return;
+
+        const ULONGLONG now = GetTickCount64();
+        if (!force && s_lastOpenMediaRefreshMs > 0 && now - s_lastOpenMediaRefreshMs < OPEN_MEDIA_REFRESH_MS)
+            return;
+
+        s_lastOpenMediaRefreshMs = now;
+        StatusMonitor_RefreshMedia(true);
+    }
+
     void UpdateHover(LPARAM lParam)
     {
         D2D1_POINT_2F p = D2D1::Point2F(GET_X_LPARAM(lParam) / s_dpiScale, GET_Y_LPARAM(lParam) / s_dpiScale);
@@ -927,16 +1107,29 @@ namespace
             StatusMonitor_MediaSkipNext();
             return;
         }
-        if (PtInRectF(s_progressRect, p) && media->hasTimeline && media->timelineEndTicks > media->timelineStartTicks)
+        long long sliderStart = 0;
+        long long sliderEnd = 0;
+        long long sliderPosition = 0;
+        if (PtInRectF(s_progressRect, p) && GetDisplayTimeline(*media, sliderStart, sliderEnd, sliderPosition))
         {
             const float t = Clamp01((p.x - s_progressRect.left) / (s_progressRect.right - s_progressRect.left));
-            const long long target = media->timelineStartTicks
-                + static_cast<long long>(static_cast<double>(media->timelineEndTicks - media->timelineStartTicks) * t);
+            const long long target = sliderStart
+                + static_cast<long long>(static_cast<double>(sliderEnd - sliderStart) * t);
             const int selected = SelectedIndex();
             if (selected >= 0 && selected < static_cast<int>(s_snapshot.mediaSessions.size()))
             {
+                s_timelineKey = MediaIdentityKey(*media);
+                s_timelineValid = true;
+                s_timelineStartTicks = sliderStart;
+                s_timelineEndTicks = sliderEnd;
+                s_timelinePositionTicks = target;
+                s_timelineSnapshotMs = GetTickCount64();
+                s_timelinePlaybackState = media->playbackState;
+                s_seekPending = true;
+                s_seekTargetTicks = target;
+                s_seekStartMs = s_timelineSnapshotMs;
                 s_snapshot.mediaSessions[selected].timelinePositionTicks = target;
-                s_snapshot.mediaSessions[selected].timelineSnapshotMs = GetTickCount64();
+                s_snapshot.mediaSessions[selected].timelineSnapshotMs = s_timelineSnapshotMs;
             }
             StatusMonitor_MediaSeekTo(target);
             Render();
@@ -1031,14 +1224,12 @@ namespace
             {
                 const auto* media = SelectedMedia();
                 const bool lightChanging = TickPlaybackLight();
+                RefreshOpenMediaSnapshot();
                 if (s_open && media && media->playbackState == MediaPlaybackState::Playing)
                 {
                     s_playingPulsePhase += 0.18f;
                     if (s_playingPulsePhase > 6.2831853f)
                         s_playingPulsePhase -= 6.2831853f;
-                    s_sliderWavePhase += 0.09f;
-                    if (s_sliderWavePhase > 6.2831853f)
-                        s_sliderWavePhase -= 6.2831853f;
                     Render();
                 }
                 else if (lightChanging)
@@ -1203,7 +1394,7 @@ HWND MediaIsland_Create(HINSTANCE hInstance, HWND navbarHwnd)
     s_ctx->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &s_brWhite);
     s_ctx->CreateSolidColorBrush(D2D1::ColorF(0.55f, 0.55f, 0.58f, 1), &s_brGrey);
     s_ctx->CreateSolidColorBrush(D2D1::ColorF(0.10f, 0.10f, 0.11f, 1), &s_brDim);
-    s_ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.45f, 0.38f, 1), &s_brAccent);
+    s_ctx->CreateSolidColorBrush(AccentTheme_GetPalette().fill, &s_brAccent);
 
     LoadSvg(L"play.svg", 16.0f, s_svgPlay);
     LoadSvg(L"pause.svg", 16.0f, s_svgPause);
@@ -1226,6 +1417,7 @@ void MediaIsland_Show(const StatusSnapshot& snapshot)
     }
 
     s_snapshot = snapshot;
+    SyncDisplayTimeline(SelectedMedia(), nullptr);
     UpdateCoverArt();
     const int selected = SelectedIndex();
     for (int i = 0; i < 32; ++i)
@@ -1238,6 +1430,7 @@ void MediaIsland_Show(const StatusSnapshot& snapshot)
         s_mediaSwitchT = 1.0f;
         s_switchFromArt.Reset();
         s_switchToArt.Reset();
+        s_lastOpenMediaRefreshMs = 0;
         s_open = true;
         ShowWindow(s_hwnd, SW_SHOWNOACTIVATE);
     }
@@ -1245,6 +1438,7 @@ void MediaIsland_Show(const StatusSnapshot& snapshot)
     if (s_animTarget < 1.0f || s_animDurMs <= 0.0f)
         StartAnim(1.0f, ANIM_IN_MS);
     SetTimer(s_hwnd, WATCH_TIMER, WATCH_TIMER_MS, nullptr);
+    RefreshOpenMediaSnapshot(true);
     Render();
 }
 
@@ -1259,8 +1453,22 @@ void MediaIsland_UpdateSnapshot(const StatusSnapshot& snapshot)
     s_snapshot = snapshot;
     const int after = SelectedIndex();
     const auto* afterPtr = SelectedMedia();
+    SyncDisplayTimeline(afterPtr, beforePtr ? &beforeMedia : nullptr);
     UpdateCoverArt();
-    if (before != after)
+
+    if (!afterPtr)
+    {
+        ClearActiveMediaDisplayState();
+        if (s_open)
+        {
+            ArmPlaybackLightTimer();
+            Render();
+        }
+        return;
+    }
+
+    const bool mediaChanged = beforePtr && afterPtr && MediaIdentityKey(beforeMedia) != MediaIdentityKey(*afterPtr);
+    if (before != after || mediaChanged)
     {
         if (beforePtr && afterPtr)
             StartMediaSwitch(beforeMedia, *afterPtr);
@@ -1271,6 +1479,14 @@ void MediaIsland_UpdateSnapshot(const StatusSnapshot& snapshot)
         ArmPlaybackLightTimer();
         Render();
     }
+}
+
+void MediaIsland_UpdateAccentTheme()
+{
+    if (s_brAccent)
+        s_brAccent->SetColor(AccentTheme_GetPalette().fill);
+    if (s_open)
+        Render();
 }
 
 void MediaIsland_TickClock()

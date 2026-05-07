@@ -4,7 +4,7 @@
 
 ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4)
 ![license](https://img.shields.io/badge/license-MIT-green)
-![version](https://img.shields.io/badge/version-1.1.0-blue)
+![version](https://img.shields.io/badge/version-1.1.1-blue)
 
 ---
 
@@ -25,7 +25,7 @@ Built entirely from scratch in C++ using Win32, Direct2D, and DirectComposition.
 - Switches to media title + animated visualizer when something is playing
 - Hover to expand — see album art, track, artist, playback controls, and a seekable progress slider
 - Multiple media sources active at once? Cycle between them with pagination dots
-- Supports Spotify, Chrome, Edge, Firefox, VLC, and any app that uses the Windows SMTC API
+- Supports Spotify, Chrome, Edge, Firefox, Zen Browser, YouTube Music Desktop App, VLC, and any app that reports to the Windows SMTC API
 
 ### Quick Settings Drawer
 Click the status cluster (Wi-Fi / Bluetooth / volume icons) to open an animated panel:
@@ -89,7 +89,8 @@ Krevon Station checks for updates silently on every launch. When a newer release
 
 **Media not showing**
 - Requires Windows 10 1809 or later
-- Play something in Spotify or a browser — it appears within ~1.5 seconds
+- Play something in Spotify or a browser — it appears within a few seconds
+- Switching videos in a browser may take up to 2 seconds to reflect — this is normal
 
 **Wi-Fi / Bluetooth / audio not showing**
 - If icons are stuck, right-click tray → Quit, then relaunch

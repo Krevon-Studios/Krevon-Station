@@ -2,7 +2,7 @@
 !define APP_ID "com.krevon.station"
 !define EXE_NAME "Krevon Station.exe"
 !define COMPANY_NAME "Krevon Studios"
-!define VERSION "1.1.0"
+!define VERSION "1.1.1"
 
 !define MUI_ICON "..\assets\logo_solid.ico"
 !define MUI_UNICON "..\assets\logo_solid.ico"
@@ -22,7 +22,7 @@ SetCompressor /SOLID lzma
 ShowInstDetails nevershow
 ShowUninstDetails nevershow
 
-VIProductVersion "1.1.0.0"
+VIProductVersion "1.1.1.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "CompanyName" "${COMPANY_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} Installer"
@@ -103,4 +103,5 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\assets"
   RMDir "$INSTDIR"
 SectionEnd
+
 

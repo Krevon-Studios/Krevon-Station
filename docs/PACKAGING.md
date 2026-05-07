@@ -68,6 +68,7 @@ This updates:
 - `Package.appxmanifest`
 - `app.rc`
 - `installer\KrevonStation.nsi`
+- `README.md` version badge
 
 The public app version is three-part, such as `1.0.11`. The Windows package/resource version is four-part, such as `1.0.11.0`.
 
@@ -137,7 +138,25 @@ Build and publish in one command:
 .\publish.ps1 1.0.11 -Build
 ```
 
-If release `v1.0.11` already exists, the asset is uploaded with `--clobber`. Otherwise the script creates the release and uploads `dist\Krevon Station Setup.exe`.
+Attach release notes (sets the GitHub release body text):
+
+```powershell
+.\publish.ps1 1.0.11 -Notes "Fixed media slider stale timeline on video switch."
+```
+
+Mark as a pre-release:
+
+```powershell
+.\publish.ps1 1.0.11 -Prerelease
+```
+
+All flags can be combined:
+
+```powershell
+.\publish.ps1 1.0.11 -Build -Notes "Beta build." -Prerelease
+```
+
+If release `v1.0.11` already exists, the asset is uploaded with `--clobber` and notes are updated if `-Notes` is supplied. Otherwise the script creates the release and uploads `dist\Krevon Station Setup.exe`.
 
 ## App Updates
 
@@ -197,4 +216,6 @@ Important constraints:
 .\release.ps1
 .\publish.ps1 1.0.11
 .\publish.ps1 1.0.11 -Build
+.\publish.ps1 1.0.11 -Build -Notes "Release notes here."
+.\publish.ps1 1.0.11 -Prerelease
 ```

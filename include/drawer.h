@@ -23,5 +23,6 @@ HWND Drawer_Create(HINSTANCE hInstance, HWND navbarHwnd);
 void Drawer_Toggle(const StatusSnapshot& snapshot);
 void Drawer_UpdateSnapshot(const StatusSnapshot& snapshot);
 void Drawer_UpdateNotifications(const std::vector<NotificationInfo>& notifications);
+void Drawer_UpdateAccentTheme();
 bool Drawer_IsOpen();
 void Drawer_Destroy();

@@ -6,6 +6,7 @@
 HWND MediaIsland_Create(HINSTANCE hInstance, HWND navbarHwnd);
 void MediaIsland_Show(const StatusSnapshot& snapshot);
 void MediaIsland_UpdateSnapshot(const StatusSnapshot& snapshot);
+void MediaIsland_UpdateAccentTheme();
 void MediaIsland_TickClock();
 bool MediaIsland_IsOpen();
 void MediaIsland_Destroy();

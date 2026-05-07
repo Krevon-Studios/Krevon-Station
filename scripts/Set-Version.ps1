@@ -36,4 +36,9 @@ $nsi = $nsi -replace '!define VERSION "\d+\.\d+\.\d+(\.\d+)?"', "!define VERSION
 $nsi = $nsi -replace 'VIProductVersion "\d+\.\d+\.\d+\.\d+"', "VIProductVersion `"$fourPart`""
 Set-Content -Path $nsiPath -Value $nsi -Encoding utf8
 
+$readmePath = Get-RepoPath "README.md"
+$readme = Get-Content $readmePath -Raw
+$readme = $readme -replace 'version-\d+\.\d+\.\d+-blue', "version-$threePart-blue"
+Set-Content -Path $readmePath -Value $readme -Encoding utf8
+
 Write-Host "Updated Krevon Station version to $threePart ($fourPart package/version resource)."

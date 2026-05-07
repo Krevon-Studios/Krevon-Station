@@ -250,7 +250,7 @@ extern D2D1_COLOR_F g_clrPillIco;
 extern D2D1_COLOR_F g_clrFill;
 extern HHOOK g_mouseHook;
 
-void UpdateAccentColors(D2D1_COLOR_F accent);
+void UpdateAccentColors();
 
 inline ID2D1SvgDocument* WifiSvg(WifiIconState s)
 {

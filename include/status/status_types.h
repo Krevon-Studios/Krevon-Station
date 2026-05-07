@@ -101,6 +101,7 @@ struct MediaSessionInfo
     long long timelineEndTicks = 0;
     long long timelinePositionTicks = 0;
     ULONGLONG timelineSnapshotMs = 0;
+    ULONGLONG mediaPropertiesChangedMs = 0;
     std::vector<BYTE> thumbnailBytes;
 };
 

@@ -10,6 +10,7 @@ void    Renderer_Resize(UINT width, UINT height);
 void    Renderer_Destroy();
 void    Renderer_SetStatusSnapshot(const StatusSnapshot& snapshot);
 void    Renderer_SetVirtualDesktopSnapshot(const VirtualDesktopSnapshot& snapshot);
+void    Renderer_UpdateAccentTheme();
 
 // Returns true if (xPx, yPx) in physical pixels hits the status icon group
 bool    Renderer_HitTestStatusBar(LONG xPx, LONG yPx);

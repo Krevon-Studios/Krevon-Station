@@ -3,8 +3,8 @@
 IDI_APP_ICON ICON "assets\\logo_solid.ico"
 
 1 VERSIONINFO
- FILEVERSION 1,1,0,0
- PRODUCTVERSION 1,1,0,0
+ FILEVERSION 1,1,1,0
+ PRODUCTVERSION 1,1,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -21,11 +21,11 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Krevon Studios"
             VALUE "FileDescription", "Krevon Station"
-            VALUE "FileVersion", "1.1.0"
+            VALUE "FileVersion", "1.1.1"
             VALUE "InternalName", "Krevon Station"
             VALUE "OriginalFilename", "Krevon Station.exe"
             VALUE "ProductName", "Krevon Station"
-            VALUE "ProductVersion", "1.1.0"
+            VALUE "ProductVersion", "1.1.1"
         END
     END
     BLOCK "VarFileInfo"
@@ -33,4 +33,5 @@ BEGIN
         VALUE "Translation", 0x409, 1200
     END
 END
+
 

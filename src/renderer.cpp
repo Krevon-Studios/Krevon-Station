@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "accent_theme.h"
 #include <d2d1_3.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -420,7 +421,7 @@ HRESULT Renderer_Init(HWND hWnd)
     hr = s_ctx->CreateSolidColorBrush(D2D1::ColorF(0.92f, 0.92f, 0.92f, 1.0f), &s_textBrush);
     if (FAILED(hr)) return hr;
 
-    hr = s_ctx->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.45f, 0.38f, 1.0f), &s_visualizerBrush);
+    hr = s_ctx->CreateSolidColorBrush(AccentTheme_GetPalette().fill, &s_visualizerBrush);
     if (FAILED(hr)) return hr;
 
     hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory),
@@ -703,6 +704,12 @@ void Renderer_SetVirtualDesktopSnapshot(const VirtualDesktopSnapshot& snapshot)
 
     s_desktopAnimStartMs = GetTickCount64();
     s_desktopAnimDurationMs = DESKTOP_MORPH_MS;
+}
+
+void Renderer_UpdateAccentTheme()
+{
+    if (s_visualizerBrush)
+        s_visualizerBrush->SetColor(AccentTheme_GetPalette().fill);
 }
 
 bool Renderer_HitTestStatusBar(LONG xPx, LONG yPx)

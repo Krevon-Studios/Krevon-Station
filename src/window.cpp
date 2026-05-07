@@ -1,4 +1,5 @@
 #include "window.h"
+#include "accent_theme.h"
 #include "shell.h"
 #include "renderer.h"
 #include "drawer.h"
@@ -42,6 +43,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     {
         AppBar_Register(hWnd);
         Tray_Add(hWnd);
+        AccentTheme_Init(hWnd);
         Renderer_Init(hWnd);
         VirtualDesktop_Init();
         Renderer_SetVirtualDesktopSnapshot(VirtualDesktop_GetSnapshot());
@@ -72,6 +74,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         StatusMonitor_Shutdown();
         VirtualDesktop_Shutdown();
         Renderer_Destroy();
+        AccentTheme_Shutdown();
         Tray_Remove(hWnd);
         AppBar_Remove(hWnd);
         PostQuitMessage(0);
@@ -157,6 +160,14 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
 
     case WM_APP_NOTIFICATIONS_CHANGED:
         Drawer_UpdateNotifications(NotificationStatus_GetNotifications());
+        return 0;
+
+    case WM_APP_ACCENT_CHANGED:
+        Renderer_UpdateAccentTheme();
+        MediaIsland_UpdateAccentTheme();
+        Drawer_UpdateAccentTheme();
+        SetTimer(hWnd, HOVER_ANIM_TIMER_ID, HOVER_ANIM_TIMER_MS, nullptr);
+        InvalidateRect(hWnd, nullptr, FALSE);
         return 0;
 
     // Drawer closed itself via a button — clear the pill highlight

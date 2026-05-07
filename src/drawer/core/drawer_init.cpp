@@ -2,10 +2,7 @@
 
 #include "../state/drawer_state.h"
 #include "../render/drawer_render.h"
-#include <winrt/Windows.UI.ViewManagement.h>
-#include <winrt/Windows.Foundation.h>
-
-static winrt::Windows::UI::ViewManagement::UISettings g_uiSettings{ nullptr };
+#include "accent_theme.h"
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
@@ -190,21 +187,14 @@ static void QueryUsername()
 
 // ── Main init ─────────────────────────────────────────────────────────────────
 
-void UpdateAccentColors(D2D1_COLOR_F accent)
+void UpdateAccentColors()
 {
-    g_accentColor = accent;
-    // Generate variants based on user's example:
-    // Base: #D33F26
-    // Slider & Icons (Light Pastel): #ED9370 (~35% white mix)
-    // Pill Icon Circle (Mid Dark): #50251F (~38% accent mix)
-    // Pill Background (Very Dark): #1F0E0C (~15% accent mix)
-    
-    D2D1_COLOR_F lightVariant = LerpColor(accent, CLR_WHITE, 0.35f);
-    
-    g_clrPill    = LerpColor(CLR_BG, accent, 0.15f);
-    g_clrPillHov = LerpColor(CLR_BG, accent, 0.22f); // Between pill and icon circle
-    g_clrPillIco = LerpColor(CLR_BG, accent, 0.38f);
-    g_clrFill    = lightVariant;
+    const AccentThemePalette palette = AccentTheme_GetPalette();
+    g_accentColor = palette.accent;
+    g_clrPill = palette.pill;
+    g_clrPillHov = palette.pillHover;
+    g_clrPillIco = palette.pillIcon;
+    g_clrFill = palette.fill;
 
     if (g_brPill)    g_brPill->SetColor(g_clrPill);
     if (g_brPillHov) g_brPillHov->SetColor(g_clrPillHov);
@@ -215,27 +205,7 @@ void UpdateAccentColors(D2D1_COLOR_F accent)
 HRESULT DrawerInit(HWND hWnd)
 {
     g_dpiScale = static_cast<float>(GetDpiForWindow(hWnd)) / 96.0f;
-
-    // Fetch System Accent Color
-    try
-    {
-        g_uiSettings = winrt::Windows::UI::ViewManagement::UISettings();
-        auto color = g_uiSettings.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-        UpdateAccentColors(D2D1::ColorF(color.R / 255.0f, color.G / 255.0f, color.B / 255.0f, color.A / 255.0f));
-
-        g_uiSettings.ColorValuesChanged([](const winrt::Windows::UI::ViewManagement::UISettings& sender, const winrt::Windows::Foundation::IInspectable&) {
-            auto newColor = sender.GetColorValue(winrt::Windows::UI::ViewManagement::UIColorType::Accent);
-            UpdateAccentColors(D2D1::ColorF(newColor.R / 255.0f, newColor.G / 255.0f, newColor.B / 255.0f, newColor.A / 255.0f));
-            if (g_drawerHwnd && g_open) {
-                InvalidateRect(g_drawerHwnd, nullptr, FALSE);
-            }
-        });
-    }
-    catch (...)
-    {
-        // Fallback to default Windows blue if WinRT is unavailable
-        UpdateAccentColors(D2D1::ColorF(0.0f, 0.47f, 0.83f, 1.0f));
-    }
+    UpdateAccentColors();
 
     // D3D11 device (hardware with BGRA support; WARP fallback)
     HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,

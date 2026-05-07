@@ -94,6 +94,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="include\desktop_preview.h" />
+    <ClInclude Include="include\accent_theme.h" />
     <ClInclude Include="include\drawer.h" />
     <ClInclude Include="include\media_island.h" />
     <ClInclude Include="include\renderer.h" />
@@ -119,6 +120,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\desktop_preview.cpp" />
+    <ClCompile Include="src\accent_theme.cpp" />
     <ClCompile Include="src\drawer\core\drawer.cpp" />
     <ClCompile Include="src\drawer\core\drawer_wndproc.cpp" />
     <ClCompile Include="src\drawer\state\drawer_state.cpp" />
